@@ -22,6 +22,11 @@ export default function Accounts() {
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
   const [selected, setSelected] = useState(new Set());
+  const [aiFilter, setAiFilter] = useState('الكل');
+  const [aiAccess, setAiAccess] = useState({});
+  const [expandedAi, setExpandedAi] = useState(new Set());
+  const [aiOverrideDraft, setAiOverrideDraft] = useState({});
+  const [savingAiId, setSavingAiId] = useState(null);
   const toast = useToast();
   const confirm = useConfirm();
   const me = useAppUser();
@@ -32,10 +37,68 @@ export default function Accounts() {
 
   const load = async () => {
     setLoading(true);
-    const { data, error } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
+    const [{ data, error }, { data: aiRows, error: aiError }] = await Promise.all([
+      supabase.from('profiles').select('*').order('created_at', { ascending: false }),
+      supabase.from('ai_access').select('*'),
+    ]);
     if (error) toast('تعذّر تحميل الحسابات', 'error');
     setProfiles(data || []);
+    if (!aiError && aiRows) {
+      const map = {};
+      aiRows.forEach((r) => { map[r.user_id] = { enabled: r.enabled, daily_limit_override: r.daily_limit_override }; });
+      setAiAccess(map);
+    }
     setLoading(false);
+  };
+
+  const getAiAccess = (userId) => aiAccess[userId] || { enabled: false, daily_limit_override: null };
+
+  const toggleAiExpand = (id) => {
+    setExpandedAi((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+        setAiOverrideDraft((d) => ({ ...d, [id]: getAiAccess(id).daily_limit_override ?? '' }));
+      }
+      return next;
+    });
+  };
+
+  const toggleAiEnabled = async (p) => {
+    const current = getAiAccess(p.id);
+    const nextEnabled = !current.enabled;
+    const { error } = await supabase
+      .from('ai_access')
+      .upsert({ user_id: p.id, enabled: nextEnabled }, { onConflict: 'user_id' });
+    if (error) { toast('تعذّر تحديث حالة المساعد الذكي', 'error'); return; }
+    setAiAccess((prev) => ({ ...prev, [p.id]: { ...current, enabled: nextEnabled } }));
+    audit(nextEnabled ? 'ai_enable' : 'ai_disable', p.id, `${nextEnabled ? 'تفعيل' : 'إيقاف'} المساعد الذكي لـ ${p.name || p.email || p.id}`);
+    toast(nextEnabled ? 'تم تفعيل المساعد الذكي لهذا الطالب' : 'تم إيقاف المساعد الذكي لهذا الطالب');
+  };
+
+  const saveAiOverride = async (p) => {
+    const raw = (aiOverrideDraft[p.id] ?? '').toString().trim();
+    let value = null;
+    if (raw !== '') {
+      const parsed = Number(raw);
+      if (!Number.isInteger(parsed) || parsed <= 0) {
+        toast('الحد اليومي المخصص لازم يكون رقم صحيح أكبر من صفر، أو سيبه فاضي عشان يستخدم الحد العام', 'error');
+        return;
+      }
+      value = parsed;
+    }
+    setSavingAiId(p.id);
+    const current = getAiAccess(p.id);
+    const { error } = await supabase
+      .from('ai_access')
+      .upsert({ user_id: p.id, daily_limit_override: value }, { onConflict: 'user_id' });
+    setSavingAiId(null);
+    if (error) { toast('تعذّر حفظ الحد المخصص', 'error'); return; }
+    setAiAccess((prev) => ({ ...prev, [p.id]: { ...current, daily_limit_override: value } }));
+    audit('ai_limit_override', p.id, `تعديل الحد اليومي المخصص لـ ${p.name || p.email || p.id} إلى ${value ?? 'الحد العام الافتراضي'}`);
+    toast('تم حفظ الحد اليومي المخصص');
   };
 
   const audit = (action, targetId, details) =>
@@ -120,9 +183,14 @@ export default function Accounts() {
         (statusFilter === 'أدمن' && p.role === 'admin') ||
         (statusFilter === 'مشرف' && p.role === 'moderator') ||
         (statusFilter === 'نشط' && !p.banned && p.role === 'student');
-      return matchesSearch && matchesGrade && matchesStatus;
+      const aiEnabled = getAiAccess(p.id).enabled;
+      const matchesAi =
+        aiFilter === 'الكل' ||
+        (aiFilter === 'مفعّل' && aiEnabled) ||
+        (aiFilter === 'معطّل' && !aiEnabled);
+      return matchesSearch && matchesGrade && matchesStatus && matchesAi;
     });
-  }, [profiles, search, gradeFilter, statusFilter]);
+  }, [profiles, search, gradeFilter, statusFilter, aiFilter, aiAccess]);
 
   const toggleSelect = (id) => {
     setSelected((prev) => {
@@ -189,6 +257,11 @@ export default function Accounts() {
         </select>
         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="input-field md:w-40">
           {['الكل', 'نشط', 'مشرف', 'أدمن', 'محظور'].map((s) => <option key={s}>{s}</option>)}
+        </select>
+        <select value={aiFilter} onChange={(e) => setAiFilter(e.target.value)} className="input-field md:w-48">
+          <option value="الكل">المساعد الذكي: الكل</option>
+          <option value="مفعّل">المساعد الذكي: مفعّل</option>
+          <option value="معطّل">المساعد الذكي: معطّل</option>
         </select>
       </div>
 
@@ -313,6 +386,43 @@ export default function Accounts() {
                         حذف نهائي
                       </button>
                     )}
+                    <button
+                      onClick={() => toggleAiExpand(p.id)}
+                      className={`text-xs font-semibold px-3 py-1.5 rounded-full ${getAiAccess(p.id).enabled ? 'bg-forest/10 text-forest' : 'text-muted hover:text-inktext'}`}
+                    >
+                      المساعد الذكي {getAiAccess(p.id).enabled ? '(مفعّل)' : ''} {expandedAi.has(p.id) ? '⌃' : '⌄'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {editingId !== p.id && expandedAi.has(p.id) && (
+                <div className="mt-3 pt-3 border-t border-parchment-line flex flex-col md:flex-row md:items-center gap-3">
+                  <label className="flex items-center gap-2 cursor-pointer shrink-0">
+                    <input
+                      type="checkbox"
+                      checked={getAiAccess(p.id).enabled}
+                      onChange={() => toggleAiEnabled(p)}
+                      className="w-4 h-4 accent-forest"
+                    />
+                    <span className="text-sm font-semibold">تفعيل المساعد الذكي لهذا الطالب</span>
+                  </label>
+                  <div className="flex items-center gap-2 flex-1">
+                    <input
+                      type="number"
+                      min="1"
+                      placeholder="افتراضي لو فاضي"
+                      value={aiOverrideDraft[p.id] ?? ''}
+                      onChange={(e) => setAiOverrideDraft((d) => ({ ...d, [p.id]: e.target.value }))}
+                      className="input-field !w-40 !py-1.5 text-sm"
+                    />
+                    <button
+                      onClick={() => saveAiOverride(p)}
+                      disabled={savingAiId === p.id}
+                      className="btn-ghost !px-3 !py-1.5 text-xs"
+                    >
+                      {savingAiId === p.id ? 'جارِ الحفظ...' : 'حفظ الحد المخصص'}
+                    </button>
                   </div>
                 </div>
               )}

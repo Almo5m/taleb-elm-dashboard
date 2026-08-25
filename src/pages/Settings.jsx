@@ -57,21 +57,44 @@ export default function Settings() {
   const [downloadUrl, setDownloadUrl] = useState('');
   const [savingVersion, setSavingVersion] = useState(false);
 
+  // المساعد الذكي
+  const AI_DEFAULTS = { enabled: false, daily_limit_per_user: 20, monthly_limit_global: 3000, model: 'gemini-2.5-flash-lite' };
+  const [aiAssistant, setAiAssistant] = useState(AI_DEFAULTS);
+  const [savingAi, setSavingAi] = useState(false);
+  const [aiUsage, setAiUsage] = useState({ loading: true, count: null, error: false });
+
   useEffect(() => {
     (async () => {
       setLoading(true);
-      const [msgs, contactLinks, maint, ver] = await Promise.all([
+      const [msgs, contactLinks, maint, ver, ai] = await Promise.all([
         readSetting('focus_messages', []),
         readSetting('contact_links', {}),
         readSetting('maintenance', { enabled: false, message: '' }),
         readSetting('min_app_version', { android: '1.0.0', url: '' }),
+        readSetting('ai_assistant', AI_DEFAULTS),
       ]);
       setMessages(Array.isArray(msgs) ? msgs : []);
       setContact(contactLinks || {});
       setMaintenance(maint || { enabled: false, message: '' });
       setMinVersion(ver?.android || '1.0.0');
       setDownloadUrl(ver?.url || '');
+      setAiAssistant({ ...AI_DEFAULTS, ...(ai || {}) });
       setLoading(false);
+    })();
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const { data, error } = await supabase.functions.invoke('admin-ai-usage', {
+          headers: { Authorization: `Bearer ${sessionData.session.access_token}` },
+        });
+        if (error) throw error;
+        setAiUsage({ loading: false, count: data?.message_count ?? 0, error: false });
+      } catch {
+        setAiUsage({ loading: false, count: null, error: true });
+      }
     })();
   }, []);
 
@@ -142,6 +165,37 @@ export default function Settings() {
     toast('تم حفظ أقل إصدار مسموح');
   };
 
+  const saveAi = async () => {
+    const dailyLimit = Number(aiAssistant.daily_limit_per_user);
+    const monthlyLimit = Number(aiAssistant.monthly_limit_global);
+    const model = (aiAssistant.model || '').trim();
+
+    if (!Number.isInteger(dailyLimit) || dailyLimit <= 0) {
+      toast('الحد اليومي لكل طالب لازم يكون رقم صحيح أكبر من صفر', 'error');
+      return;
+    }
+    if (!Number.isInteger(monthlyLimit) || monthlyLimit <= 0) {
+      toast('السقف الشهري الإجمالي لازم يكون رقم صحيح أكبر من صفر', 'error');
+      return;
+    }
+    if (!model) {
+      toast('اسم الموديل مينفعش يبقى فاضي', 'error');
+      return;
+    }
+
+    setSavingAi(true);
+    const { error } = await writeSetting('ai_assistant', {
+      enabled: aiAssistant.enabled,
+      daily_limit_per_user: dailyLimit,
+      monthly_limit_global: monthlyLimit,
+      model,
+    });
+    setSavingAi(false);
+    if (error) { toast('تعذّر الحفظ', 'error'); return; }
+    setAiAssistant({ enabled: aiAssistant.enabled, daily_limit_per_user: dailyLimit, monthly_limit_global: monthlyLimit, model });
+    toast(aiAssistant.enabled ? 'تم حفظ إعدادات المساعد الذكي — الميزة مفعّلة' : 'تم حفظ إعدادات المساعد الذكي');
+  };
+
   if (loading) return <Spinner />;
 
   return (
@@ -192,6 +246,68 @@ export default function Settings() {
           placeholder="رابط تحميل الـ APK مباشرة (مش رابط جوجل بلاي، التطبيق مش عليه)"
           className="input-field mt-1"
         />
+      </Section>
+
+      <Section
+        title="المساعد الذكي"
+        hint="التحكم في مساعد الذكاء الاصطناعي جوه التطبيق وحدود استخدامه"
+        onSave={saveAi}
+        saving={savingAi}
+      >
+        <label className="flex items-center gap-3 mb-4 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={aiAssistant.enabled}
+            onChange={(e) => setAiAssistant({ ...aiAssistant, enabled: e.target.checked })}
+            className="w-5 h-5 accent-coral"
+          />
+          <span className="font-semibold text-sm">تفعيل المساعد الذكي</span>
+        </label>
+
+        <div className="grid grid-cols-2 gap-3 mb-3">
+          <div>
+            <label className="text-xs text-muted font-semibold">الحد اليومي الافتراضي لكل طالب</label>
+            <input
+              type="number"
+              min="1"
+              value={aiAssistant.daily_limit_per_user}
+              onChange={(e) => setAiAssistant({ ...aiAssistant, daily_limit_per_user: e.target.value })}
+              className="input-field mt-1"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-muted font-semibold">السقف الشهري الإجمالي</label>
+            <input
+              type="number"
+              min="1"
+              value={aiAssistant.monthly_limit_global}
+              onChange={(e) => setAiAssistant({ ...aiAssistant, monthly_limit_global: e.target.value })}
+              className="input-field mt-1"
+            />
+            <p className="text-xs text-muted mt-1">حد إجمالي لكل الطلاب مجتمعين، مش لكل طالب لوحده</p>
+          </div>
+        </div>
+
+        <label className="text-xs text-muted font-semibold">اسم الموديل</label>
+        <input
+          value={aiAssistant.model}
+          onChange={(e) => setAiAssistant({ ...aiAssistant, model: e.target.value })}
+          className="input-field mt-1"
+        />
+        <p className="text-xs text-muted mt-1 mb-4">بيسمح بتغيير المزوّد لاحقًا من غير تحديث تطبيق</p>
+
+        <div className="bg-parchment rounded-xl px-3 py-2.5">
+          <p className="text-xs text-muted font-semibold mb-1">الاستهلاك الشهري الحالي</p>
+          {aiUsage.loading ? (
+            <p className="text-sm text-muted">جارِ التحميل...</p>
+          ) : aiUsage.error ? (
+            <p className="text-sm text-coral-dark">تعذّر تحميل الاستهلاك — تأكد إن Edge Function "admin-ai-usage" متنشورة (راجع README)</p>
+          ) : (
+            <p className="text-sm font-semibold">
+              {aiUsage.count.toLocaleString('en-US')} / {(Number(aiAssistant.monthly_limit_global) || 0).toLocaleString('en-US')} رسالة
+            </p>
+          )}
+        </div>
       </Section>
 
       <Section
