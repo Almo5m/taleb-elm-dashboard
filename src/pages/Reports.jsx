@@ -20,7 +20,7 @@ export default function Reports() {
     setLoading(true);
     const { data } = await supabase
       .from('forum_reports')
-      .select('*, forum_threads(title, body), forum_replies(body)')
+      .select('*, forum_threads(title, body, author_id, author_name), forum_replies(body, author_id, author_name)')
       .eq('status', tab)
       .order('created_at', { ascending: false });
     setReports(data || []);
@@ -45,6 +45,17 @@ export default function Reports() {
     await supabase.from('forum_reports').delete().eq('id', id);
     setReports((prev) => prev.filter((r) => r.id !== id));
     toast('تم حذف البلاغ');
+  };
+
+  const banAuthor = async (report) => {
+    const author = report.thread_id ? report.forum_threads : report.forum_replies;
+    if (!author?.author_id) { toast('تعذّر تحديد صاحب المحتوى — يمكن يكون الحساب محذوف', 'error'); return; }
+    const ok = await confirm(`هل تريد حظر "${author.author_name || 'الحساب'}"؟ لن يقدر يدخل التطبيق بعدها.`, { danger: true, confirmLabel: 'حظر الحساب' });
+    if (!ok) return;
+    const { error } = await supabase.from('profiles').update({ banned: true }).eq('id', author.author_id);
+    if (error) { toast('تعذّر حظر الحساب', 'error'); return; }
+    logAction({ adminId: me?.id, adminName: me?.name || 'مشرف', action: 'ban', targetType: 'profile', targetId: author.author_id, details: `حظر ${author.author_name || author.author_id} من صفحة البلاغات` });
+    toast('تم حظر الحساب');
   };
 
   const deleteReportedContent = async (report) => {
@@ -94,7 +105,11 @@ export default function Reports() {
                 <Stamp tone={tab === 'pending' ? 'coral' : 'forest'}>{r.reason}</Stamp>
                 <span className="text-xs text-muted">{new Date(r.created_at).toLocaleDateString('ar-EG')}</span>
               </div>
-              <p className="text-sm font-semibold mb-1">{r.thread_id ? 'بلاغ عن سؤال' : 'بلاغ عن رد'}</p>
+              <p className="text-sm font-semibold mb-1">
+                {r.thread_id ? 'بلاغ عن سؤال' : 'بلاغ عن رد'}
+                {' '}بواسطة{' '}
+                <span className="text-inktext">{(r.thread_id ? r.forum_threads?.author_name : r.forum_replies?.author_name) || 'مستخدم محذوف'}</span>
+              </p>
               <p className="text-sm text-muted bg-parchment rounded-xl p-3">
                 {r.thread_id ? (r.forum_threads?.title || 'محتوى محذوف') : (r.forum_replies?.body || 'محتوى محذوف')}
               </p>
@@ -102,6 +117,7 @@ export default function Reports() {
                 {tab === 'pending' ? (
                   <>
                     <button onClick={() => deleteReportedContent(r)} className="btn-danger !px-4 !py-2 text-xs">حذف المحتوى المبلّغ عنه</button>
+                    <button onClick={() => banAuthor(r)} className="btn-danger !px-4 !py-2 text-xs">حظر الكاتب</button>
                     <button onClick={() => markReviewed(r.id)} className="btn-ghost !px-4 !py-2 text-xs">تمت المراجعة بدون حذف</button>
                   </>
                 ) : (

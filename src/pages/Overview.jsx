@@ -29,10 +29,37 @@ export default function Overview() {
   const [subjects, setSubjects] = useState([]);
   const [signupsError, setSignupsError] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [aiInfo, setAiInfo] = useState({ loading: true, error: false, enabled: false, count: null, limit: null, activeStudents: 0 });
 
   useEffect(() => {
     load();
+    loadAiInfo();
   }, []);
+
+  const loadAiInfo = async () => {
+    try {
+      const [{ data: settingsRow }, { count: activeStudents }] = await Promise.all([
+        supabase.from('app_settings').select('value').eq('key', 'ai_assistant').maybeSingle(),
+        supabase.from('ai_access').select('*', { count: 'exact', head: true }).eq('enabled', true),
+      ]);
+      const settings = settingsRow?.value || {};
+      const { data: sessionData } = await supabase.auth.getSession();
+      const { data, error } = await supabase.functions.invoke('admin-ai-usage', {
+        headers: { Authorization: `Bearer ${sessionData.session.access_token}` },
+      });
+      if (error) throw error;
+      setAiInfo({
+        loading: false,
+        error: false,
+        enabled: !!settings.enabled,
+        count: data?.message_count ?? 0,
+        limit: settings.monthly_limit_global ?? 3000,
+        activeStudents: activeStudents || 0,
+      });
+    } catch {
+      setAiInfo((prev) => ({ ...prev, loading: false, error: true }));
+    }
+  };
 
   const load = async () => {
     setLoading(true);
@@ -175,6 +202,39 @@ export default function Overview() {
           )}
         </div>
 
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-5 mb-5">
+        <div className="card p-6">
+          <div className="flex items-center justify-between mb-1">
+            <p className="font-messiri font-bold">المساعد الذكي</p>
+            <Link to="/settings" className="text-xs font-semibold text-muted hover:text-inktext">الإعدادات ←</Link>
+          </div>
+          <p className="text-xs text-muted mb-5">الاستهلاك الشهري مقابل السقف الإجمالي</p>
+          {aiInfo.loading ? (
+            <p className="text-sm text-muted">جارِ التحميل...</p>
+          ) : aiInfo.error ? (
+            <p className="text-sm text-coral-dark">تعذّر تحميل بيانات المساعد الذكي</p>
+          ) : !aiInfo.enabled ? (
+            <p className="text-sm text-muted">المساعد الذكي مش مفعّل حاليًا من الإعدادات</p>
+          ) : (
+            <>
+              <p className="text-2xl font-extrabold font-messiri mb-1">
+                {aiInfo.count.toLocaleString('en-US')} <span className="text-sm font-normal text-muted">/ {aiInfo.limit.toLocaleString('en-US')} رسالة</span>
+              </p>
+              <div className="h-2 rounded-full bg-parchment overflow-hidden mb-3">
+                <div className="h-full bg-gold rounded-full" style={{ width: `${Math.min((aiInfo.count / (aiInfo.limit || 1)) * 100, 100)}%` }} />
+              </div>
+              {aiInfo.activeStudents === 0 ? (
+                <p className="text-xs text-coral-dark bg-coral/10 border border-coral/30 rounded-lg px-2 py-1.5">
+                  الميزة مفعّلة بس مفيش أي طالب مفعّل له الوصول من صفحة الحسابات
+                </p>
+              ) : (
+                <p className="text-xs text-muted">{aiInfo.activeStudents} طالب مفعّل له الوصول حاليًا</p>
+              )}
+            </>
+          )}
+        </div>
       </div>
 
       <div className="grid gap-5">
