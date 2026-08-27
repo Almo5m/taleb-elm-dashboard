@@ -22,14 +22,6 @@ function daysAgoLabel(n) {
   return days[d.getDay()];
 }
 
-const SUPABASE_PROJECT_REF = 'urpzmcvftooacnnwdpqn';
-const SUPABASE_DASHBOARD_LINKS = [
-  { label: 'Edge Functions', path: 'functions' },
-  { label: 'محرر الجداول', path: 'editor' },
-  { label: 'محرر SQL', path: 'sql/new' },
-  { label: 'مستخدمو Auth', path: 'auth/users' },
-];
-
 export default function Overview() {
   const [stats, setStats] = useState({ users: 0, threads: 0, replies: 0, banned: 0, reports: 0 });
   const [weekly, setWeekly] = useState(Array(7).fill(0));
@@ -262,21 +254,7 @@ export default function Overview() {
 
         <div className="card p-6">
           <p className="font-messiri font-bold mb-1">صحة النظام</p>
-          <p className="text-xs text-muted mb-5">روابط سريعة لمشروع Supabase وفحص فوري لـ Edge Functions</p>
-
-          <div className="flex flex-wrap gap-2 mb-4">
-            {SUPABASE_DASHBOARD_LINKS.map((l) => (
-              <a
-                key={l.path}
-                href={`https://supabase.com/dashboard/project/${SUPABASE_PROJECT_REF}/${l.path}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn-ghost !px-3 !py-1.5 text-xs"
-              >
-                {l.label} ↗
-              </a>
-            ))}
-          </div>
+          <p className="text-xs text-muted mb-5">فحص فوري لـ Edge Functions</p>
 
           <div className="flex items-center gap-3">
             <button onClick={checkHealth} disabled={health.status === 'checking'} className="btn-primary !px-4 !py-2 text-xs">
