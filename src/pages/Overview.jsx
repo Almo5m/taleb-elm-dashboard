@@ -22,6 +22,14 @@ function daysAgoLabel(n) {
   return days[d.getDay()];
 }
 
+const SUPABASE_PROJECT_REF = 'urpzmcvftooacnnwdpqn';
+const SUPABASE_DASHBOARD_LINKS = [
+  { label: 'Edge Functions', path: 'functions' },
+  { label: 'محرر الجداول', path: 'editor' },
+  { label: 'محرر SQL', path: 'sql/new' },
+  { label: 'مستخدمو Auth', path: 'auth/users' },
+];
+
 export default function Overview() {
   const [stats, setStats] = useState({ users: 0, threads: 0, replies: 0, banned: 0, reports: 0 });
   const [weekly, setWeekly] = useState(Array(7).fill(0));
@@ -30,6 +38,22 @@ export default function Overview() {
   const [signupsError, setSignupsError] = useState(null);
   const [loading, setLoading] = useState(true);
   const [aiInfo, setAiInfo] = useState({ loading: true, error: false, enabled: false, count: null, limit: null, activeStudents: 0 });
+  const [health, setHealth] = useState({ status: 'idle', latencyMs: null });
+
+  const checkHealth = async () => {
+    setHealth({ status: 'checking', latencyMs: null });
+    const started = performance.now();
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const { error } = await supabase.functions.invoke('admin-ai-usage', {
+        headers: { Authorization: `Bearer ${sessionData.session.access_token}` },
+      });
+      if (error) throw error;
+      setHealth({ status: 'ok', latencyMs: Math.round(performance.now() - started) });
+    } catch {
+      setHealth({ status: 'error', latencyMs: Math.round(performance.now() - started) });
+    }
+  };
 
   useEffect(() => {
     load();
@@ -234,6 +258,37 @@ export default function Overview() {
               )}
             </>
           )}
+        </div>
+
+        <div className="card p-6">
+          <p className="font-messiri font-bold mb-1">صحة النظام</p>
+          <p className="text-xs text-muted mb-5">روابط سريعة لمشروع Supabase وفحص فوري لـ Edge Functions</p>
+
+          <div className="flex flex-wrap gap-2 mb-4">
+            {SUPABASE_DASHBOARD_LINKS.map((l) => (
+              <a
+                key={l.path}
+                href={`https://supabase.com/dashboard/project/${SUPABASE_PROJECT_REF}/${l.path}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn-ghost !px-3 !py-1.5 text-xs"
+              >
+                {l.label} ↗
+              </a>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button onClick={checkHealth} disabled={health.status === 'checking'} className="btn-primary !px-4 !py-2 text-xs">
+              {health.status === 'checking' ? 'جارِ الفحص...' : 'فحص admin-ai-usage الآن'}
+            </button>
+            {health.status === 'ok' && (
+              <span className="text-xs text-forest font-semibold">شغالة ✅ ({health.latencyMs}ms)</span>
+            )}
+            {health.status === 'error' && (
+              <span className="text-xs text-coral-dark font-semibold">فيها مشكلة ⚠️ — راجع Logs في Edge Functions</span>
+            )}
+          </div>
         </div>
       </div>
 

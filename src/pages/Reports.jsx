@@ -3,6 +3,7 @@ import { supabase } from '../supabaseClient';
 import { PageHeader, Spinner, Stamp, EmptyState, useToast, useConfirm } from '../components/UI';
 import { useAppUser } from '../context/AppUser';
 import { logAction } from '../lib/audit';
+import { exportToCsv } from '../lib/csv';
 
 export default function Reports() {
   const [reports, setReports] = useState([]);
@@ -72,25 +73,56 @@ export default function Reports() {
     toast('تم حذف المحتوى وتحويل البلاغ للمراجَعة');
   };
 
+  const exportReports = () => {
+    const flat = reports.map((r) => {
+      const target = r.thread_id ? r.forum_threads : r.forum_replies;
+      return {
+        created_at: new Date(r.created_at).toLocaleString('ar-EG'),
+        reason: r.reason,
+        type: r.thread_id ? 'سؤال' : 'رد',
+        author_name: target?.author_name || 'مستخدم محذوف',
+        content: r.thread_id ? (target?.title || 'محتوى محذوف') : (target?.body || 'محتوى محذوف'),
+        status: tab === 'pending' ? 'معلّق' : 'تمت المراجعة',
+      };
+    });
+    exportToCsv(
+      `بلاغات-${tab === 'pending' ? 'معلقة' : 'تمت-مراجعتها'}.csv`,
+      flat,
+      [
+        { key: 'created_at', label: 'التاريخ' },
+        { key: 'reason', label: 'السبب' },
+        { key: 'type', label: 'نوع المحتوى' },
+        { key: 'author_name', label: 'صاحب المحتوى' },
+        { key: 'content', label: 'المحتوى' },
+        { key: 'status', label: 'الحالة' },
+      ]
+    );
+  };
+
   return (
     <div>
       <PageHeader eyebrow="مراقبة المنتدى" title="البلاغات" />
 
-      <div className="flex gap-2 mb-6">
-        {[
-          { key: 'pending', label: 'معلّقة' },
-          { key: 'reviewed', label: 'تمت المراجعة' },
-        ].map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`px-4 py-2 rounded-xl text-sm font-semibold border-2 transition ${
-              tab === t.key ? 'bg-ink text-parchment border-ink' : 'border-parchment-line text-muted hover:border-ink'
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
+      <div className="flex items-center justify-between flex-wrap gap-3 mb-6">
+        <div className="flex gap-2">
+          {[
+            { key: 'pending', label: 'معلّقة' },
+            { key: 'reviewed', label: 'تمت المراجعة' },
+          ].map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={`px-4 py-2 rounded-xl text-sm font-semibold border-2 transition ${
+                tab === t.key ? 'bg-ink text-parchment border-ink' : 'border-parchment-line text-muted hover:border-ink'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+        <button onClick={exportReports} disabled={reports.length === 0} className="btn-primary !px-4 !py-2 text-xs">
+          تصدير CSV
+        </button>
       </div>
 
       {loading ? (

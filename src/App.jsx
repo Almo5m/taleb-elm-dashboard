@@ -33,7 +33,7 @@ const navItems = [
   { to: '/profile', label: 'الملف الشخصي', icon: '⚉' },
 ];
 
-function Sidebar({ onLogout, mobileOpen, setMobileOpen }) {
+function Sidebar({ onLogout, mobileOpen, setMobileOpen, pendingReports }) {
   const me = useAppUser();
   const isAdmin = me?.role === 'admin';
   const visibleItems = navItems.filter((item) => !item.adminOnly || isAdmin);
@@ -85,7 +85,12 @@ function Sidebar({ onLogout, mobileOpen, setMobileOpen }) {
                 <>
                   {isActive && <span className="absolute -right-5 top-1/2 -translate-y-1/2 w-2.5 h-6 bg-gold rounded-l-full" />}
                   <span className="w-5 text-center">{item.icon}</span>
-                  {item.label}
+                  <span className="flex-1">{item.label}</span>
+                  {item.to === '/reports' && pendingReports > 0 && (
+                    <span className="min-w-[20px] h-5 px-1.5 flex items-center justify-center rounded-full bg-coral text-white text-[11px] font-bold">
+                      {pendingReports > 99 ? '99+' : pendingReports}
+                    </span>
+                  )}
                 </>
               )}
             </NavLink>
@@ -112,10 +117,34 @@ function AdminOnly({ children }) {
 
 function Layout({ onLogout }) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [pendingReports, setPendingReports] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    const loadCount = async () => {
+      const { count } = await supabase.from('forum_reports').select('*', { count: 'exact', head: true }).eq('status', 'pending');
+      if (active) setPendingReports(count || 0);
+    };
+    loadCount();
+
+    // تحديث لحظي — أي بلاغ جديد يوصل أو حالته تتغيّر (تمت المراجعة/رجوع للمعلّقة)
+    // بيحدّث الرقم فورًا من غير ما تحتاج تعمل ريفريش للصفحة
+    const channel = supabase
+      .channel('sidebar-pending-reports')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'forum_reports' }, () => {
+        loadCount();
+      })
+      .subscribe();
+
+    return () => {
+      active = false;
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   return (
     <div className="min-h-screen flex bg-parchment">
-      <Sidebar onLogout={onLogout} mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} />
+      <Sidebar onLogout={onLogout} mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} pendingReports={pendingReports} />
 
       <div className="flex-1 min-w-0">
         <header className="md:hidden sticky top-0 z-20 bg-parchment/90 backdrop-blur border-b border-parchment-line px-4 py-3 flex items-center justify-between">
