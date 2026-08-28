@@ -7,6 +7,7 @@ import Login from './pages/Login';
 import Overview from './pages/Overview';
 import Forum from './pages/Forum';
 import Accounts from './pages/Accounts';
+import StudentProfile from './pages/StudentProfile';
 import Reports from './pages/Reports';
 import Announcement from './pages/Announcement';
 import StudyPlans from './pages/StudyPlans';
@@ -159,6 +160,7 @@ function Layout({ onLogout }) {
           <Routes>
             <Route path="/" element={<Overview />} />
             <Route path="/accounts" element={<AdminOnly><Accounts /></AdminOnly>} />
+            <Route path="/accounts/:id" element={<AdminOnly><StudentProfile /></AdminOnly>} />
             <Route path="/forum" element={<Forum />} />
             <Route path="/reports" element={<Reports />} />
             <Route path="/leaderboard" element={<Leaderboard />} />

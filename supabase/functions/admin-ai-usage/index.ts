@@ -5,6 +5,10 @@
 // بتتحقق إن الطالب اللي بعت الطلب أدمن فعلاً، وبعدين تقرا صف الشهر الحالي
 // بمفتاح service_role اللي بيتجاوز RLS.
 //
+// (نسخة محدّثة): لو الطلب فيه body.user_id، بترجع كمان استهلاك النهاردة بتاع
+// الطالب ده تحديدًا (لصفحة الملف الشخصي في اللوحة) — من غير ما تكسر أي كود
+// قديم بينادي الدالة من غير user_id (زي Settings.jsx و Overview.jsx).
+//
 // النشر:
 //   1) لازم Supabase CLI: https://supabase.com/docs/guides/cli
 //   2) supabase login
@@ -26,6 +30,10 @@ function currentMonthKey() {
   const year = now.getUTCFullYear();
   const month = String(now.getUTCMonth() + 1).padStart(2, '0');
   return `${year}-${month}`;
+}
+
+function todayKey() {
+  return new Date().toISOString().slice(0, 10);
 }
 
 Deno.serve(async (req) => {
@@ -70,6 +78,15 @@ Deno.serve(async (req) => {
       });
     }
 
+    // body اختياري — لو فيه user_id بنرجع كمان استهلاك النهاردة بتاع الطالب ده
+    let body: { user_id?: string } = {};
+    try {
+      body = await req.json();
+    } catch {
+      body = {};
+    }
+    const targetUserId = body?.user_id;
+
     // عميل بصلاحيات service_role — هو الوحيد اللي يقدر يقرا جداول الاستهلاك
     const adminClient = createClient(
       Deno.env.get('SUPABASE_URL'),
@@ -90,8 +107,24 @@ Deno.serve(async (req) => {
       });
     }
 
+    let student = null;
+    if (targetUserId) {
+      const today = todayKey();
+      const [{ data: dailyRow }, { data: accessRow }, { data: settingsRow }] = await Promise.all([
+        adminClient.from('ai_usage_daily').select('message_count').eq('user_id', targetUserId).eq('usage_date', today).maybeSingle(),
+        adminClient.from('ai_access').select('daily_limit_override').eq('user_id', targetUserId).maybeSingle(),
+        adminClient.from('app_settings').select('value').eq('key', 'ai_assistant').maybeSingle(),
+      ]);
+      const globalDefault = settingsRow?.value?.daily_limit_per_user ?? 20;
+      student = {
+        usage_date: today,
+        today_count: dailyRow?.message_count ?? 0,
+        daily_limit: accessRow?.daily_limit_override ?? globalDefault,
+      };
+    }
+
     return new Response(
-      JSON.stringify({ month, message_count: usageRow?.message_count ?? 0 }),
+      JSON.stringify({ month, message_count: usageRow?.message_count ?? 0, student }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (err) {
@@ -101,3 +134,4 @@ Deno.serve(async (req) => {
     });
   }
 });
+

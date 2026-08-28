@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { PageHeader, Spinner, Stamp, EmptyState, useToast, useConfirm } from '../components/UI';
 import { useAppUser } from '../context/AppUser';
@@ -6,12 +7,6 @@ import { logAction } from '../lib/audit';
 import { exportToCsv } from '../lib/csv';
 
 const GRADES = ['الصف الأول الثانوي', 'الصف الثاني الثانوي', 'الصف الثالث الثانوي'];
-const SYSTEMS = ['الثانوية العامة', 'البكالوريا المصرية'];
-const ROLES = [
-  { value: 'student', label: 'طالب' },
-  { value: 'moderator', label: 'مشرف' },
-  { value: 'admin', label: 'أدمن كامل' },
-];
 
 export default function Accounts() {
   const [profiles, setProfiles] = useState([]);
@@ -19,14 +14,9 @@ export default function Accounts() {
   const [search, setSearch] = useState('');
   const [gradeFilter, setGradeFilter] = useState('الكل');
   const [statusFilter, setStatusFilter] = useState('الكل');
-  const [editingId, setEditingId] = useState(null);
-  const [editForm, setEditForm] = useState({});
-  const [selected, setSelected] = useState(new Set());
   const [aiFilter, setAiFilter] = useState('الكل');
   const [aiAccess, setAiAccess] = useState({});
-  const [expandedAi, setExpandedAi] = useState(new Set());
-  const [aiOverrideDraft, setAiOverrideDraft] = useState({});
-  const [savingAiId, setSavingAiId] = useState(null);
+  const [selected, setSelected] = useState(new Set());
   const toast = useToast();
   const confirm = useConfirm();
   const me = useAppUser();
@@ -53,123 +43,8 @@ export default function Accounts() {
 
   const getAiAccess = (userId) => aiAccess[userId] || { enabled: false, daily_limit_override: null };
 
-  const toggleAiExpand = (id) => {
-    setExpandedAi((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-        setAiOverrideDraft((d) => ({ ...d, [id]: getAiAccess(id).daily_limit_override ?? '' }));
-      }
-      return next;
-    });
-  };
-
-  const toggleAiEnabled = async (p) => {
-    const current = getAiAccess(p.id);
-    const nextEnabled = !current.enabled;
-    const { error } = await supabase
-      .from('ai_access')
-      .upsert({ user_id: p.id, enabled: nextEnabled }, { onConflict: 'user_id' });
-    if (error) { toast('تعذّر تحديث حالة المساعد الذكي', 'error'); return; }
-    setAiAccess((prev) => ({ ...prev, [p.id]: { ...current, enabled: nextEnabled } }));
-    audit(nextEnabled ? 'ai_enable' : 'ai_disable', p.id, `${nextEnabled ? 'تفعيل' : 'إيقاف'} المساعد الذكي لـ ${p.name || p.email || p.id}`);
-    toast(nextEnabled ? 'تم تفعيل المساعد الذكي لهذا الطالب' : 'تم إيقاف المساعد الذكي لهذا الطالب');
-  };
-
-  const saveAiOverride = async (p) => {
-    const raw = (aiOverrideDraft[p.id] ?? '').toString().trim();
-    let value = null;
-    if (raw !== '') {
-      const parsed = Number(raw);
-      if (!Number.isInteger(parsed) || parsed <= 0) {
-        toast('الحد اليومي المخصص لازم يكون رقم صحيح أكبر من صفر، أو سيبه فاضي عشان يستخدم الحد العام', 'error');
-        return;
-      }
-      value = parsed;
-    }
-    setSavingAiId(p.id);
-    const current = getAiAccess(p.id);
-    const { error } = await supabase
-      .from('ai_access')
-      .upsert({ user_id: p.id, daily_limit_override: value }, { onConflict: 'user_id' });
-    setSavingAiId(null);
-    if (error) { toast('تعذّر حفظ الحد المخصص', 'error'); return; }
-    setAiAccess((prev) => ({ ...prev, [p.id]: { ...current, daily_limit_override: value } }));
-    audit('ai_limit_override', p.id, `تعديل الحد اليومي المخصص لـ ${p.name || p.email || p.id} إلى ${value ?? 'الحد العام الافتراضي'}`);
-    toast('تم حفظ الحد اليومي المخصص');
-  };
-
   const audit = (action, targetId, details) =>
     logAction({ adminId: me?.id, adminName: me?.name || 'أدمن', action, targetType: 'profile', targetId, details });
-
-  const toggleBan = async (p) => {
-    const ok = await confirm(
-      p.banned ? `هل تريد إلغاء حظر "${p.name || 'الحساب'}"؟` : `هل تريد حظر "${p.name || 'الحساب'}"؟ لن يقدر يدخل التطبيق بعدها.`,
-      { danger: !p.banned, confirmLabel: p.banned ? 'إلغاء الحظر' : 'حظر الحساب' }
-    );
-    if (!ok) return;
-    const { error } = await supabase.from('profiles').update({ banned: !p.banned }).eq('id', p.id);
-    if (error) { toast('حصل خطأ، حاول تاني', 'error'); return; }
-    setProfiles((prev) => prev.map((x) => (x.id === p.id ? { ...x, banned: !p.banned } : x)));
-    audit(p.banned ? 'unban' : 'ban', p.id, `${p.banned ? 'إلغاء حظر' : 'حظر'} ${p.name || p.email || p.id}`);
-    toast(p.banned ? 'تم إلغاء الحظر' : 'تم حظر الحساب');
-  };
-
-  const changeRole = async (p, newRole) => {
-    if (newRole === p.role) return;
-    const ok = await confirm(
-      `هل تريد تغيير دور "${p.name || 'الحساب'}" إلى "${ROLES.find((r) => r.value === newRole)?.label}"؟`,
-      { danger: newRole === 'student', confirmLabel: 'تأكيد التغيير' }
-    );
-    if (!ok) return;
-    const { error } = await supabase.from('profiles').update({ role: newRole }).eq('id', p.id);
-    if (error) { toast('حصل خطأ، حاول تاني', 'error'); return; }
-    setProfiles((prev) => prev.map((x) => (x.id === p.id ? { ...x, role: newRole } : x)));
-    audit(newRole === 'student' ? 'demote' : 'promote', p.id, `تغيير دور ${p.name || p.email || p.id} إلى ${newRole}`);
-    toast('تم تحديث الصلاحية');
-  };
-
-  const sendPasswordReset = async (p) => {
-    if (!p.email) { toast('مفيش إيميل مسجل لهذا الحساب', 'error'); return; }
-    const { error } = await supabase.auth.resetPasswordForEmail(p.email, {
-      redirectTo: `${window.location.origin}/reset-password`,
-    });
-    if (error) { toast('تعذّر إرسال الرابط', 'error'); return; }
-    toast(`تم إرسال رابط تغيير كلمة المرور إلى ${p.email}`);
-  };
-
-  const deleteAccountPermanently = async (p) => {
-    const ok = await confirm(
-      `حذف نهائي لحساب "${p.name || p.email}" — هيتحذف الحساب وكل بياناته من قاعدة البيانات بشكل لا رجعة فيه. متأكد؟`,
-      { danger: true, confirmLabel: 'حذف نهائي لا رجعة فيه' }
-    );
-    if (!ok) return;
-    const { data: sessionData } = await supabase.auth.getSession();
-    const { error } = await supabase.functions.invoke('admin-delete-user', {
-      body: { user_id: p.id },
-      headers: { Authorization: `Bearer ${sessionData.session.access_token}` },
-    });
-    if (error) { toast('تعذّر الحذف — تأكد إن الـ Edge Function متنشورة (راجع README)', 'error'); return; }
-    setProfiles((prev) => prev.filter((x) => x.id !== p.id));
-    audit('delete_account', p.id, `حذف نهائي لحساب ${p.name || p.email || p.id}`);
-    toast('تم حذف الحساب نهائيًا');
-  };
-
-  const startEdit = (p) => {
-    setEditingId(p.id);
-    setEditForm({ name: p.name || '', system: p.system || '', grade: p.grade || '', track: p.track || '' });
-  };
-
-  const saveEdit = async (id) => {
-    const { error } = await supabase.from('profiles').update(editForm).eq('id', id);
-    if (error) { toast('تعذّر حفظ التعديل', 'error'); return; }
-    setProfiles((prev) => prev.map((p) => (p.id === id ? { ...p, ...editForm } : p)));
-    audit('edit_profile', id, `تعديل بيانات ${editForm.name || id}`);
-    setEditingId(null);
-    toast('تم حفظ التعديلات');
-  };
 
   const filtered = useMemo(() => {
     return profiles.filter((p) => {
@@ -282,151 +157,48 @@ export default function Accounts() {
       ) : filtered.length === 0 ? (
         <EmptyState icon="◉" title="مفيش حسابات مطابقة" hint="جرّب تغيّر البحث أو الفلاتر" />
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-2">
           {filtered.map((p) => (
-            <div key={p.id} className="card p-4">
-              {editingId === p.id ? (
-                <div className="space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-xs text-muted font-semibold">الاسم</label>
-                      <input
-                        value={editForm.name}
-                        onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                        className="input-field mt-1"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-muted font-semibold">النظام</label>
-                      <select
-                        value={editForm.system}
-                        onChange={(e) => setEditForm({ ...editForm, system: e.target.value, track: '' })}
-                        className="input-field mt-1"
-                      >
-                        <option value="">—</option>
-                        {SYSTEMS.map((s) => <option key={s} value={s}>{s}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="text-xs text-muted font-semibold">الصف</label>
-                      <select
-                        value={editForm.grade}
-                        onChange={(e) => setEditForm({ ...editForm, grade: e.target.value })}
-                        className="input-field mt-1"
-                      >
-                        <option value="">—</option>
-                        {GRADES.map((g) => <option key={g} value={g}>{g}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="text-xs text-muted font-semibold">الشعبة/المسار</label>
-                      <input
-                        value={editForm.track}
-                        onChange={(e) => setEditForm({ ...editForm, track: e.target.value })}
-                        className="input-field mt-1"
-                        placeholder="مثال: علمي علوم"
-                      />
-                    </div>
+            <Link
+              to={`/accounts/${p.id}`}
+              key={p.id}
+              className="card p-4 flex items-center justify-between gap-3 flex-wrap hover:border-ink transition"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                {p.role !== 'admin' && (
+                  <input
+                    type="checkbox"
+                    checked={selected.has(p.id)}
+                    onChange={() => toggleSelect(p.id)}
+                    onClick={(e) => e.stopPropagation()}
+                    className="w-4 h-4 accent-ink shrink-0"
+                  />
+                )}
+                {p.avatar_url ? (
+                  <img src={p.avatar_url} className="w-10 h-10 rounded-full object-cover border-2 border-ink shrink-0" alt="" />
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-ink text-gold flex items-center justify-center text-sm font-messiri shrink-0">
+                    {(p.name || '؟').charAt(0)}
                   </div>
-                  <div className="flex gap-2">
-                    <button onClick={() => saveEdit(p.id)} className="btn-primary !px-4 !py-1.5 text-sm">حفظ</button>
-                    <button onClick={() => setEditingId(null)} className="btn-ghost !px-4 !py-1.5 text-sm">إلغاء</button>
-                  </div>
+                )}
+                <div className="min-w-0">
+                  <p className="font-semibold flex items-center gap-2 flex-wrap">
+                    {p.name || 'بدون اسم'}
+                    {p.role === 'admin' && <Stamp tone="gold">أدمن</Stamp>}
+                    {p.role === 'moderator' && <Stamp tone="ink">مشرف</Stamp>}
+                    {p.banned && <Stamp tone="coral">محظور</Stamp>}
+                    {getAiAccess(p.id).enabled && <Stamp tone="forest">AI مفعّل</Stamp>}
+                  </p>
+                  <p className="text-xs text-muted truncate">
+                    {p.email || '—'} · {p.system || '—'} • {p.grade || '—'} {p.track ? `• ${p.track}` : ''}
+                  </p>
+                  <p className="text-xs text-muted/70 mt-0.5">
+                    سجّل في {new Date(p.created_at).toLocaleDateString('ar-EG', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  </p>
                 </div>
-              ) : (
-                <div className="flex items-center justify-between gap-3 flex-wrap">
-                  <div className="flex items-center gap-3 min-w-0">
-                    {p.role !== 'admin' && (
-                      <input
-                        type="checkbox"
-                        checked={selected.has(p.id)}
-                        onChange={() => toggleSelect(p.id)}
-                        className="w-4 h-4 accent-ink shrink-0"
-                      />
-                    )}
-                    {p.avatar_url ? (
-                      <img src={p.avatar_url} className="w-10 h-10 rounded-full object-cover border-2 border-ink shrink-0" alt="" />
-                    ) : (
-                      <div className="w-10 h-10 rounded-full bg-ink text-gold flex items-center justify-center text-sm font-messiri shrink-0">
-                        {(p.name || '؟').charAt(0)}
-                      </div>
-                    )}
-                    <div className="min-w-0">
-                      <p className="font-semibold flex items-center gap-2 flex-wrap">
-                        {p.name || 'بدون اسم'}
-                        {p.role === 'admin' && <Stamp tone="gold">أدمن</Stamp>}
-                        {p.role === 'moderator' && <Stamp tone="ink">مشرف</Stamp>}
-                        {p.banned && <Stamp tone="coral">محظور</Stamp>}
-                      </p>
-                      <p className="text-xs text-muted truncate">
-                        {p.email || '—'} · {p.system || '—'} • {p.grade || '—'} {p.track ? `• ${p.track}` : ''}
-                      </p>
-                      <p className="text-xs text-muted/70 mt-0.5">
-                        سجّل في {new Date(p.created_at).toLocaleDateString('ar-EG', { day: 'numeric', month: 'short', year: 'numeric' })}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex gap-2 flex-wrap items-center">
-                    <select
-                      value={p.role || 'student'}
-                      onChange={(e) => changeRole(p, e.target.value)}
-                      className="input-field !w-auto !py-1.5 text-xs"
-                    >
-                      {ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
-                    </select>
-                    <button onClick={() => startEdit(p)} className="btn-ghost !px-3 !py-1.5 text-xs">تعديل البيانات</button>
-                    <button onClick={() => sendPasswordReset(p)} className="btn-ghost !px-3 !py-1.5 text-xs">رابط كلمة المرور</button>
-                    {p.role !== 'admin' && (
-                      <button onClick={() => toggleBan(p)} className={p.banned ? 'btn-ghost !px-3 !py-1.5 text-xs' : 'btn-danger !px-3 !py-1.5 text-xs'}>
-                        {p.banned ? 'إلغاء الحظر' : 'حظر'}
-                      </button>
-                    )}
-                    {p.role !== 'admin' && (
-                      <button onClick={() => deleteAccountPermanently(p)} className="text-xs font-semibold text-coral-dark hover:underline px-1">
-                        حذف نهائي
-                      </button>
-                    )}
-                    <button
-                      onClick={() => toggleAiExpand(p.id)}
-                      className={`text-xs font-semibold px-3 py-1.5 rounded-full ${getAiAccess(p.id).enabled ? 'bg-forest/10 text-forest' : 'text-muted hover:text-inktext'}`}
-                    >
-                      المساعد الذكي {getAiAccess(p.id).enabled ? '(مفعّل)' : ''} {expandedAi.has(p.id) ? '⌃' : '⌄'}
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {editingId !== p.id && expandedAi.has(p.id) && (
-                <div className="mt-3 pt-3 border-t border-parchment-line flex flex-col md:flex-row md:items-center gap-3">
-                  <label className="flex items-center gap-2 cursor-pointer shrink-0">
-                    <input
-                      type="checkbox"
-                      checked={getAiAccess(p.id).enabled}
-                      onChange={() => toggleAiEnabled(p)}
-                      className="w-4 h-4 accent-forest"
-                    />
-                    <span className="text-sm font-semibold">تفعيل المساعد الذكي لهذا الطالب</span>
-                  </label>
-                  <div className="flex items-center gap-2 flex-1">
-                    <input
-                      type="number"
-                      min="1"
-                      placeholder="افتراضي لو فاضي"
-                      value={aiOverrideDraft[p.id] ?? ''}
-                      onChange={(e) => setAiOverrideDraft((d) => ({ ...d, [p.id]: e.target.value }))}
-                      className="input-field !w-40 !py-1.5 text-sm"
-                    />
-                    <button
-                      onClick={() => saveAiOverride(p)}
-                      disabled={savingAiId === p.id}
-                      className="btn-ghost !px-3 !py-1.5 text-xs"
-                    >
-                      {savingAiId === p.id ? 'جارِ الحفظ...' : 'حفظ الحد المخصص'}
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
+              </div>
+              <span className="text-xs font-semibold text-muted shrink-0">الملف الشخصي ←</span>
+            </Link>
           ))}
         </div>
       )}
