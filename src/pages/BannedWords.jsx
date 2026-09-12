@@ -2,24 +2,35 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
 import { PageHeader, Spinner, EmptyState, useToast, useConfirm } from '../components/UI';
 
-// كلمة سر لدخول صفحة الكلمات الممنوعة بس (حماية اجتماعية بسيطة، مش تشفير حقيقي —
-// أي حد يعرف يفتح كود الموقع في المتصفح يقدر يشوفها، الهدف بس منع أي حد يفتح
-// الصفحة دي بالغلط أو يشوفها وهو مش قاصد)
-const GATE_PASSWORD = '@moaz@';
+// الصفحة دي فيها محتوى حساس، فبنطلب تأكيد إضافي: الأدمن يكتب باسورد حسابه
+// هو نفسه (مش سر تاني)، وبنتحقق منها فعليًا عن طريق Supabase Auth
+// (signInWithPassword) — يعني مفيش أي كلمة سر مخزّنة أو مكتوبة في الكود
+// خالص، والتحقق حقيقي على السيرفر مش مجرد مقارنة نص في المتصفح.
 const SESSION_KEY = 'banned_words_unlocked';
 
 function Gate({ onUnlock }) {
   const [input, setInput] = useState('');
   const [error, setError] = useState(false);
+  const [checking, setChecking] = useState(false);
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault();
-    if (input === GATE_PASSWORD) {
-      sessionStorage.setItem(SESSION_KEY, '1');
-      onUnlock();
-    } else {
+    setChecking(true);
+    setError(false);
+
+    const { data: sessionData } = await supabase.auth.getSession();
+    const email = sessionData?.session?.user?.email;
+
+    const { error: authError } = await supabase.auth.signInWithPassword({ email, password: input });
+
+    if (authError) {
       setError(true);
+      setChecking(false);
+      return;
     }
+
+    sessionStorage.setItem(SESSION_KEY, '1');
+    onUnlock();
   };
 
   return (
@@ -27,18 +38,20 @@ function Gate({ onUnlock }) {
       <PageHeader eyebrow="محتوى مقيّد" title="الكلمات الممنوعة" />
       <form onSubmit={submit} className="card p-6 max-w-sm">
         <div className="w-12 h-12 rounded-full bg-ink text-gold flex items-center justify-center text-xl mb-4">🔒</div>
-        <p className="font-semibold mb-1">الصفحة دي محتاجة كلمة سر</p>
-        <p className="text-sm text-muted mb-4">المحتوى حساس ومقتصر على أفراد معينين في الإدارة</p>
+        <p className="font-semibold mb-1">أكّد باسورد حسابك للمتابعة</p>
+        <p className="text-sm text-muted mb-4">المحتوى حساس — محتاجين تأكيد إضافي إنك فعلاً صاحب الحساب</p>
         <input
           type="password"
           value={input}
           onChange={(e) => { setInput(e.target.value); setError(false); }}
           autoFocus
           className="input-field mb-3"
-          placeholder="كلمة السر"
+          placeholder="باسورد حسابك"
         />
-        {error && <p className="text-coral-dark text-sm font-semibold mb-3">كلمة السر غلط</p>}
-        <button type="submit" className="btn-primary w-full">دخول</button>
+        {error && <p className="text-coral-dark text-sm font-semibold mb-3">الباسورد غلط</p>}
+        <button type="submit" disabled={checking} className="btn-primary w-full">
+          {checking ? 'جارِ التحقق...' : 'تأكيد'}
+        </button>
       </form>
     </div>
   );
