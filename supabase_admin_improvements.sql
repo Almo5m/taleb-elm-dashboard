@@ -22,6 +22,7 @@ create index if not exists ai_chat_logs_created_at_idx on public.ai_chat_logs(cr
 
 alter table public.ai_chat_logs enable row level security;
 
+drop policy if exists "Admins can view ai_chat_logs" on public.ai_chat_logs;
 create policy "Admins can view ai_chat_logs"
   on public.ai_chat_logs for select
   using (public.is_admin());
@@ -58,7 +59,7 @@ begin
     url := 'https://urpzmcvftooacnnwdpqn.supabase.co/functions/v1/telegram-notify',
     headers := jsonb_build_object(
       'Content-Type', 'application/json',
-      'Authorization', 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVycHptY3ZmdG9vYWNubndkcHFuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ0NzI4OTcsImV4cCI6MjEwMDA0ODg5N30.pRAHXSAcktKqL0trbUW6Ckpi3UWWjMzA1nce3O8NI8o',
+      'Authorization', 'Bearer ضع_مفتاح_anon_القديم_هنا',
       'x-webhook-secret', 'taleb-elm-webhook-9f3a7c2e1b'
     ),
     body := jsonb_build_object('table', table_name, 'event', event_type, 'record', row_data)
