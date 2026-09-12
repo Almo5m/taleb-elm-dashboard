@@ -1,0 +1,6 @@
+# انسخ الملف ده واسمه .dev.vars (من غير .example) في نفس المجلد،
+# وحط فيه نفس القيم اللي حطيتها بالـ wrangler secret put.
+# الملف ده لأغراض الاختبار المحلي (wrangler dev) بس، ومتجاهل من Git تلقائيًا.
+
+SUPABASE_ANON_KEY=""
+SUPABASE_JWT_SECRET=""

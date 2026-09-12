@@ -30,6 +30,8 @@ export default function Overview() {
   const [signupsError, setSignupsError] = useState(null);
   const [loading, setLoading] = useState(true);
   const [aiInfo, setAiInfo] = useState({ loading: true, error: false, enabled: false, count: null, limit: null, activeStudents: 0 });
+  const [aiLeaderboard, setAiLeaderboard] = useState({ loading: true, rows: [] });
+  const [recentQuestions, setRecentQuestions] = useState({ loading: true, rows: [] });
   const [health, setHealth] = useState({ status: 'idle', latencyMs: null });
 
   const checkHealth = async () => {
@@ -50,7 +52,49 @@ export default function Overview() {
   useEffect(() => {
     load();
     loadAiInfo();
+    loadAiLeaderboard();
+    loadRecentQuestions();
   }, []);
+
+  const loadAiLeaderboard = async () => {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const { data, error } = await supabase.functions.invoke('admin-ai-usage', {
+        headers: { Authorization: `Bearer ${sessionData.session.access_token}` },
+        body: { leaderboard: true },
+      });
+      if (error) throw error;
+      setAiLeaderboard({ loading: false, rows: data?.leaderboard ?? [] });
+    } catch (err) {
+      console.error('AI leaderboard error:', err);
+      setAiLeaderboard({ loading: false, rows: [] });
+    }
+  };
+
+  const loadRecentQuestions = async () => {
+    try {
+      const { data: logs, error } = await supabase
+        .from('ai_chat_logs')
+        .select('id, user_id, question, created_at')
+        .order('created_at', { ascending: false })
+        .limit(10);
+      if (error) throw error;
+
+      const userIds = [...new Set((logs ?? []).map((l) => l.user_id))];
+      const { data: profiles } = userIds.length
+        ? await supabase.from('profiles').select('id, full_name').in('id', userIds)
+        : { data: [] };
+      const nameById = new Map((profiles ?? []).map((p) => [p.id, p.full_name]));
+
+      setRecentQuestions({
+        loading: false,
+        rows: (logs ?? []).map((l) => ({ ...l, full_name: nameById.get(l.user_id) ?? 'طالب' })),
+      });
+    } catch (err) {
+      console.error('Recent AI questions error:', err);
+      setRecentQuestions({ loading: false, rows: [] });
+    }
+  };
 
   const loadAiInfo = async () => {
     try {
@@ -267,6 +311,58 @@ export default function Overview() {
               <span className="text-xs text-coral-dark font-semibold">فيها مشكلة ⚠️ — راجع Logs في Edge Functions</span>
             )}
           </div>
+        </div>
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-5 mb-5">
+        <div className="card p-6">
+          <div className="flex items-center justify-between mb-1">
+            <p className="font-messiri font-bold">أكتر الطلاب استخدامًا للـ AI</p>
+            <span className="text-xs font-semibold text-muted">هذا الشهر</span>
+          </div>
+          <p className="text-xs text-muted mb-4">إجمالي رسايل كل طالب للمساعد الذكي</p>
+          {aiLeaderboard.loading ? (
+            <p className="text-sm text-muted">جارِ التحميل...</p>
+          ) : aiLeaderboard.rows.length === 0 ? (
+            <p className="text-sm text-muted">مفيش استخدام مسجّل الشهر ده لسه</p>
+          ) : (
+            <div className="divide-y divide-parchment-line">
+              {aiLeaderboard.rows.map((r, i) => (
+                <Link
+                  key={r.user_id}
+                  to={`/accounts/${r.user_id}`}
+                  className="flex items-center gap-3 py-2 hover:bg-parchment/60 -mx-2 px-2 rounded-lg"
+                >
+                  <span className="w-6 text-xs font-bold text-muted shrink-0">{i + 1}</span>
+                  <span className="flex-1 min-w-0 truncate text-sm font-semibold">{r.full_name}</span>
+                  <Stamp tone="gold">{r.message_count} رسالة</Stamp>
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="card p-6">
+          <div className="flex items-center justify-between mb-1">
+            <p className="font-messiri font-bold">أحدث أسئلة الطلاب للمساعد الذكي</p>
+          </div>
+          <p className="text-xs text-muted mb-4">
+            راجع الأسئلة لتقييم هل الاستخدام في المنهج ولا لأ — بتتمسح تلقائيًا بعد 60 يوم
+          </p>
+          {recentQuestions.loading ? (
+            <p className="text-sm text-muted">جارِ التحميل...</p>
+          ) : recentQuestions.rows.length === 0 ? (
+            <p className="text-sm text-muted">مفيش أسئلة مسجّلة لسه</p>
+          ) : (
+            <div className="divide-y divide-parchment-line max-h-72 overflow-y-auto">
+              {recentQuestions.rows.map((q) => (
+                <div key={q.id} className="py-2">
+                  <p className="text-xs font-semibold text-muted mb-0.5">{q.full_name}</p>
+                  <p className="text-sm truncate">{q.question}</p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
