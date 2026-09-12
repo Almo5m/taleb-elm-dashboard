@@ -116,6 +116,71 @@ git push -u origin main
 ### حاجة واحدة مقصودة إننا محضّرهاش
 **حذف حساب نهائيًا** من لوحة التحكم محتاج صلاحيات `service_role` بتاعة Supabase، ومفيش طريقة آمنة تحطها في كود موقع بيشتغل في متصفح المستخدم (أي حد يفتح Developer Tools هيقدر ياخدها ويتحكم في القاعدة بالكامل). البديل الآمن المتاح دلوقتي هو **الحظر** (بيمنع تسجيل الدخول فورًا). لو عايز حذف حقيقي لاحقًا، الطريقة الصح هي Supabase Edge Function منفصلة تستخدم service_role من السيرفر — ممكن نضيفها في خطوة تانية لو حبيت.
 
+## آخر تحديث — وصول Claude للوحة (MCP) + رصد استخدام الـ AI + تنبيهات تليجرام
+
+### MCP Server — قراءة فقط، من أي جهاز
+عملت سيرفر MCP منفصل (`mcp-server/`) منشور على Cloudflare Workers، بيخلي Claude
+(موبايل أو ويب) يوصل للوحة ويرد على أسئلة إدارية وإحصائية مباشرة، من غير ما
+يقدر يعدّل أي حاجة:
+
+- صلاحية القراءة مفروضة من الداتابيز نفسها (`mcp_readonly` role عنده SELECT
+  بس)، مش بس من كود الـ Worker — حتى لو حصل خطأ في الكود، الكتابة مرفوضة
+  أساسًا
+- تسجيل الدخول بنفس إيميل وباسورد الأدمن في اللوحة، بشرط `role = admin`
+- التفاصيل الكاملة وخطوات النشر في `mcp-server/README.md`
+
+### رصد استخدام الطلاب للـ AI
+- **`ai_chat_logs`**: بيسجّل سؤال الطالب بس (مش رد "بو")، وصول أدمن فقط،
+  وبيتمسح تلقائيًا بعد 60 يوم
+- **تصنيف تلقائي يومي** (منهج / التطبيق / دعم / خارج النطاق) عن طريق
+  `classify-ai-questions` — طلب Gemini واحد لكل دفعة بدل طلب لكل رسالة، عشان
+  ميضاعفش استهلاك الـ API
+- كارت في الـ Overview بيوري أكتر 10 طلاب استخدامًا للشهر + آخر 10 أسئلة
+  مع التصنيف بتاعها
+
+### حماية إضافية في `ai-assistant`
+- Rate limit: رسالة كل 3 ثواني كحد أقصى للطالب الواحد
+- لو Gemini فشل (خطأ، رد فاضي، exception)، بيوصلني تنبيه تليجرام — بس
+  بـ debounce 10 دقايق عشان outage مستمر ميغرقنيش برسايل
+
+### تنبيهات تليجرام على الأحداث المهمة
+`telegram-notify` بيتنادى من Database Triggers على: طالب جديد، موضوع/رد
+جديد في المنتدى، بلاغ جديد، تغيير في الكلمات الممنوعة، إعلان جديد، أي إجراء
+في `admin_audit_log`، تغيير صلاحية AI لطالب، تعديل إعدادات التطبيق.
+عمدًا مستبعد: `ai_usage_daily/monthly` و`user_stats` — بتتغير كل ثانية
+ومالهاش قيمة كإشعار.
+
+### تقرير أسبوعي
+`weekly-report` بيتجدول كل جمعة 9 مساءً، وبيبعتلي ملخص تليجرام: طلاب جدد،
+نشاط المنتدى، بلاغات الأسبوع، وأكتر طالب استخدامًا للـ AI.
+
+### ملفات الـ SQL الجديدة (رتّبهم بالترتيب ده)
+8. `supabase_admin_improvements.sql` — `ai_chat_logs` + تنبيهات تليجرام
+9. `supabase_backend_improvements_v2.sql` — rate limiting، تصنيف الأسئلة،
+   retention إضافي للبلاغات المحلولة
+10. `supabase_backend_improvements_v3.sql` — جدولة التقرير الأسبوعي
+
+كل ملف فيه تعليق `⚠️` على القيم اللي لازم تتغيّر (project ref، anon key،
+webhook secret) قبل التشغيل.
+
+### Secrets الجديدة المطلوبة
+```bash
+supabase secrets set TELEGRAM_BOT_TOKEN=...
+supabase secrets set TELEGRAM_CHAT_ID=...
+supabase secrets set WEBHOOK_SECRET=...
+```
+(الأسرار دي متاحة تلقائيًا لكل الـ Edge Functions في المشروع، مش لازم
+تتحط لكل فنكشن لوحدها)
+
+### فنكشنز جديدة تحتاج نشر
+```bash
+supabase functions deploy telegram-notify
+supabase functions deploy classify-ai-questions
+supabase functions deploy weekly-report
+supabase functions deploy ai-assistant
+supabase functions deploy admin-ai-usage
+```
+
 ## الترخيص
 هذا المشروع ملكية خاصة، جميع الحقوق محفوظة لـ Moaz (AlMo). ممنوع نسخ أو توزيع
 أو تعديل الكود أو أي جزء منه من غير إذن كتابي مسبق. راجع ملف `LICENSE` للتفاصيل.
