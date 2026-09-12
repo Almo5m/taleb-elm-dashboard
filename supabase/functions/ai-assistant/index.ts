@@ -69,6 +69,37 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
+// تنبيه تليجرام لو Gemini بيفشل — بـ debounce 10 دقايق عشان لو حصل outage
+// مايغرقش تليجرام برسايل متكررة على كل طلب فاشل لوحده. الأسرار
+// TELEGRAM_BOT_TOKEN و TELEGRAM_CHAT_ID متاحة هنا تلقائيًا لإن أسرار
+// Supabase مشتركة على مستوى المشروع كله، مش لازم تتحط تاني لكل فنكشن.
+async function alertGeminiFailure(admin: ReturnType<typeof createClient>, detail: string) {
+  try {
+    const { data: state } = await admin
+      .from('ai_error_alert_state')
+      .select('last_alert_at')
+      .eq('id', true)
+      .maybeSingle();
+
+    const lastAlertMs = state?.last_alert_at ? new Date(state.last_alert_at).getTime() : 0;
+    if (Date.now() - lastAlertMs < 10 * 60 * 1000) return; // اتبعت تنبيه من أقل من 10 دقايق
+
+    await admin.from('ai_error_alert_state').update({ last_alert_at: new Date().toISOString() }).eq('id', true);
+
+    const token = Deno.env.get('TELEGRAM_BOT_TOKEN');
+    const chatId = Deno.env.get('TELEGRAM_CHAT_ID');
+    if (!token || !chatId) return;
+
+    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text: `⚠️ المساعد الذكي (بو) بيفشل في الرد\n${detail}` }),
+    });
+  } catch (e) {
+    console.error('alertGeminiFailure error:', e);
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method !== 'POST') {
     return jsonResponse({ error: 'method not allowed' }, 405);
@@ -90,6 +121,20 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: 'unauthorized' }, 401);
   }
   const userId = userData.user.id;
+
+  // منع الرسايل المتلاحقة بسرعة غير طبيعية (رسالة كل 3 ثواني كحد أقصى) —
+  // بيحمي من bug في التطبيق بيبعت طلبات متكررة أو استخدام غير طبيعي
+  const { data: rateLimitRow } = await admin
+    .from('ai_rate_limit')
+    .select('last_request_at')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  const now = Date.now();
+  if (rateLimitRow && now - new Date(rateLimitRow.last_request_at).getTime() < 3000) {
+    return jsonResponse({ blocked: true, reason: 'استنى ثواني وابعت تاني' }, 200);
+  }
+  await admin.from('ai_rate_limit').upsert({ user_id: userId, last_request_at: new Date().toISOString() });
 
   let body: { message?: string };
   try {
@@ -200,6 +245,7 @@ Deno.serve(async (req) => {
       // عشان أي فشل جاي يبان سببه واضح بدل ما نضطر نخمّن
       const errBody = await geminiRes.text();
       console.error('Gemini API error:', geminiRes.status, errBody);
+      await alertGeminiFailure(admin, `كود الخطأ: ${geminiRes.status}`);
       return jsonResponse({ error: 'حصل خطأ، حاول تاني' }, 502);
     }
 
@@ -217,10 +263,12 @@ Deno.serve(async (req) => {
 
     if (!replyText) {
       console.error('Gemini returned empty reply. Raw response:', JSON.stringify(geminiData));
+      await alertGeminiFailure(admin, 'رجع رد فاضي من Gemini');
       return jsonResponse({ error: 'حصل خطأ، حاول تاني' }, 502);
     }
   } catch (e) {
     console.error('Unexpected error calling Gemini:', e);
+    await alertGeminiFailure(admin, `خطأ غير متوقع: ${String(e)}`);
     return jsonResponse({ error: 'حصل خطأ، حاول تاني' }, 502);
   }
 

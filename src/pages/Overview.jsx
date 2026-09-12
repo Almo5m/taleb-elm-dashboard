@@ -75,7 +75,7 @@ export default function Overview() {
     try {
       const { data: logs, error } = await supabase
         .from('ai_chat_logs')
-        .select('id, user_id, question, created_at')
+        .select('id, user_id, question, category, created_at')
         .order('created_at', { ascending: false })
         .limit(10);
       if (error) throw error;
@@ -357,7 +357,18 @@ export default function Overview() {
             <div className="divide-y divide-parchment-line max-h-72 overflow-y-auto">
               {recentQuestions.rows.map((q) => (
                 <div key={q.id} className="py-2">
-                  <p className="text-xs font-semibold text-muted mb-0.5">{q.full_name}</p>
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <p className="text-xs font-semibold text-muted">{q.full_name}</p>
+                    {q.category && (
+                      <Stamp
+                        tone={
+                          q.category === 'منهج' ? 'forest' : q.category === 'خارج النطاق' ? 'coral' : 'gold'
+                        }
+                      >
+                        {q.category}
+                      </Stamp>
+                    )}
+                  </div>
                   <p className="text-sm truncate">{q.question}</p>
                 </div>
               ))}
