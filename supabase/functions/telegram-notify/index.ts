@@ -27,7 +27,7 @@ function formatMessage({ table, event, record }: WebhookPayload): string {
 
   switch (table) {
     case 'profiles':
-      return `👤 طالب جديد سجّل في طالب علم\nالاسم: ${record.full_name ?? '—'}\nالإيميل: ${record.email ?? '—'}`;
+      return `👤 طالب جديد سجّل في طالب علم\nالاسم: ${record.name ?? '—'}\nالإيميل: ${record.email ?? '—'}`;
 
     case 'forum_threads':
       return `💬 موضوع جديد في المنتدى\nالعنوان: ${record.title ?? '—'}`;

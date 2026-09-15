@@ -166,13 +166,13 @@ Deno.serve(async (req) => {
 
       const { data: profileRows } = await adminClient
         .from('profiles')
-        .select('id, full_name, email')
+        .select('id, name, email')
         .in('id', topUserIds.length ? topUserIds : ['00000000-0000-0000-0000-000000000000']);
 
       const profileById = new Map((profileRows ?? []).map((p) => [p.id, p]));
       leaderboard = topUserIds.map((userId) => ({
         user_id: userId,
-        full_name: profileById.get(userId)?.full_name ?? '—',
+        full_name: profileById.get(userId)?.name ?? '—',
         email: profileById.get(userId)?.email ?? '—',
         message_count: totalsByUser.get(userId) ?? 0,
       }));

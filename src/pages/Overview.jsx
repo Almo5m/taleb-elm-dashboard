@@ -82,9 +82,9 @@ export default function Overview() {
 
       const userIds = [...new Set((logs ?? []).map((l) => l.user_id))];
       const { data: profiles } = userIds.length
-        ? await supabase.from('profiles').select('id, full_name').in('id', userIds)
+        ? await supabase.from('profiles').select('id, name').in('id', userIds)
         : { data: [] };
-      const nameById = new Map((profiles ?? []).map((p) => [p.id, p.full_name]));
+      const nameById = new Map((profiles ?? []).map((p) => [p.id, p.name]));
 
       setRecentQuestions({
         loading: false,

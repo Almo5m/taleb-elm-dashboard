@@ -57,8 +57,8 @@ Deno.serve(async (req) => {
   const topEntry = [...totalsByUser.entries()].sort((a, b) => b[1] - a[1])[0];
   let topStudentLine = 'مفيش استخدام مسجّل';
   if (topEntry) {
-    const { data: topProfile } = await admin.from('profiles').select('full_name').eq('id', topEntry[0]).maybeSingle();
-    topStudentLine = `${topProfile?.full_name ?? 'طالب'} (${topEntry[1]} رسالة)`;
+    const { data: topProfile } = await admin.from('profiles').select('name').eq('id', topEntry[0]).maybeSingle();
+    topStudentLine = `${topProfile?.name ?? 'طالب'} (${topEntry[1]} رسالة)`;
   }
 
   const text = `📊 التقرير الأسبوعي — طالب علم
