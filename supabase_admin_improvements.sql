@@ -85,7 +85,6 @@ do $$
 declare
   t record;
   triggers_config jsonb := '[
-    {"table_name": "profiles", "event": "INSERT"},
     {"table_name": "forum_threads", "event": "INSERT"},
     {"table_name": "forum_replies", "event": "INSERT"},
     {"table_name": "forum_reports", "event": "INSERT"},
@@ -113,3 +112,12 @@ begin
     end if;
   end loop;
 end $$;
+
+-- إشعار "طالب جديد" لازم يتبعت لما الاسم يتسجّل فعليًا (إكمال التسجيل)،
+-- مش وقت إنشاء الصف المبدئي في profiles (id + email بس، من غير اسم)
+drop trigger if exists trg_notify_telegram_signup_complete_profiles on public.profiles;
+create trigger trg_notify_telegram_signup_complete_profiles
+  after update on public.profiles
+  for each row
+  when (old.name is null and new.name is not null)
+  execute function public.notify_telegram_trigger();
