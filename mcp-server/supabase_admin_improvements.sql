@@ -22,7 +22,6 @@ create index if not exists ai_chat_logs_created_at_idx on public.ai_chat_logs(cr
 
 alter table public.ai_chat_logs enable row level security;
 
-drop policy if exists "Admins can view ai_chat_logs" on public.ai_chat_logs;
 create policy "Admins can view ai_chat_logs"
   on public.ai_chat_logs for select
   using (public.is_admin());
@@ -45,10 +44,11 @@ select cron.schedule(
 -- Function اسمها telegram-notify مع كل حدث. المستثنى عمدًا: ai_usage_daily/
 -- monthly, user_stats, study_plan_tasks — بتتغير بكثرة ومالهاش قيمة كإشعار.
 --
--- ⚠️ عدّل الأسطر التلاتة تحت (url و Authorization و x-webhook-secret) بقيمك
--- الحقيقية قبل التشغيل — بس خلي بالك متسيبش علامتي < > حوالين القيمة،
--- وخد الـ anon key من تبويب "Legacy anon, service_role API keys"
--- (بيبدأ بـ eyJ...) مش من تبويب المفاتيح الجديدة (sb_publishable_...)
+-- ⚠️ غيّر القيمتين دول قبل التشغيل:
+--   - <PROJECT_REF>: الجزء اللي في رابط مشروعك (urpzmcvftooacnnwdpqn)
+--   - <ANON_KEY>: من Project Settings → API → Legacy anon key
+--   - <WEBHOOK_SECRET>: أي نص عشوائي طويل من اختيارك، ونفسه بالظبط هتحطه
+--     بعدين كـ secret اسمه WEBHOOK_SECRET على الـ Edge Function
 
 create extension if not exists pg_net with schema extensions;
 
@@ -56,11 +56,11 @@ create or replace function public.notify_telegram(table_name text, event_type te
 returns void as $$
 begin
   perform net.http_post(
-    url := 'https://urpzmcvftooacnnwdpqn.supabase.co/functions/v1/telegram-notify',
+    url := 'https://<PROJECT_REF>.supabase.co/functions/v1/telegram-notify',
     headers := jsonb_build_object(
       'Content-Type', 'application/json',
-      'Authorization', 'Bearer ضع_مفتاح_anon_القديم_هنا',
-      'x-webhook-secret', 'taleb-elm-webhook-9f3a7c2e1b'
+      'Authorization', 'Bearer <ANON_KEY>',
+      'x-webhook-secret', '<WEBHOOK_SECRET>'
     ),
     body := jsonb_build_object('table', table_name, 'event', event_type, 'record', row_data)
   );

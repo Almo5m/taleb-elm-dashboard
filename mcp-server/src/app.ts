@@ -9,6 +9,18 @@ interface Env {
 
 const app = new Hono<{ Bindings: Env }>();
 
+// escaping بسيط عشان أي نص بيتحقن جوه الـ HTML متبقاش قادرة تكسر الصفحة أو
+// تحقن سكريبت — errorMessage دلوقتي نصوص ثابتة من عندي بس، لكن الأفضل نمنع
+// النمط الخطر من الأساس بدل ما نعتمد على إننا "متأكدين" من مصدره
+function escapeHtml(input: string): string {
+  return input
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function loginPage(oauthRequestToken: string, errorMessage?: string) {
   return `<!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -32,8 +44,8 @@ function loginPage(oauthRequestToken: string, errorMessage?: string) {
 <body>
   <form method="POST">
     <h1>الدخول للوحة تحكم طالب علم — MCP</h1>
-    ${errorMessage ? `<div class="error">${errorMessage}</div>` : ''}
-    <input type="hidden" name="oauth_request" value="${oauthRequestToken}" />
+    ${errorMessage ? `<div class="error">${escapeHtml(errorMessage)}</div>` : ''}
+    <input type="hidden" name="oauth_request" value="${escapeHtml(oauthRequestToken)}" />
     <label>البريد الإلكتروني</label>
     <input type="email" name="email" required autofocus />
     <label>كلمة المرور</label>

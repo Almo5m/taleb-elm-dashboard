@@ -122,19 +122,48 @@ Deno.serve(async (req) => {
   }
   const userId = userData.user.id;
 
-  // منع الرسايل المتلاحقة بسرعة غير طبيعية (رسالة كل 3 ثواني كحد أقصى) —
-  // بيحمي من bug في التطبيق بيبعت طلبات متكررة أو استخدام غير طبيعي
+  // Rate limiting بطبقتين:
+  // 1) فاصل أدنى 3 ثواني بين كل رسالة والتانية (يمنع bug في التطبيق أو
+  //    ضغط متكرر سريع)
+  // 2) نافذة حقيقية 60 ثانية بحد أقصى 15 رسالة — بتمنع طالب من "التحايل"
+  //    على فاصل الـ 3 ثواني ببعت رسالة كل 3.1 ثانية بالظبط ويستهلك ميزانية
+  //    كبيرة في وقت قصير؛ النافذة بتتصفّر تلقائيًا كل 60 ثانية من أول رسالة
+  //    فيها
+  const MAX_PER_WINDOW = 15;
+  const WINDOW_MS = 60_000;
+
   const { data: rateLimitRow } = await admin
     .from('ai_rate_limit')
-    .select('last_request_at')
+    .select('last_request_at, window_start, request_count')
     .eq('user_id', userId)
     .maybeSingle();
 
   const now = Date.now();
+
   if (rateLimitRow && now - new Date(rateLimitRow.last_request_at).getTime() < 3000) {
     return jsonResponse({ blocked: true, reason: 'استنى ثواني وابعت تاني' }, 200);
   }
-  await admin.from('ai_rate_limit').upsert({ user_id: userId, last_request_at: new Date().toISOString() });
+
+  let windowStart = now;
+  let requestCount = 1;
+
+  if (rateLimitRow) {
+    const windowAgeMs = now - new Date(rateLimitRow.window_start).getTime();
+    if (windowAgeMs < WINDOW_MS) {
+      if (rateLimitRow.request_count >= MAX_PER_WINDOW) {
+        return jsonResponse({ blocked: true, reason: 'بعتّ رسايل كتير أوي في وقت قصير، استنى دقيقة وجرّب تاني' }, 200);
+      }
+      windowStart = new Date(rateLimitRow.window_start).getTime();
+      requestCount = rateLimitRow.request_count + 1;
+    }
+  }
+
+  await admin.from('ai_rate_limit').upsert({
+    user_id: userId,
+    last_request_at: new Date(now).toISOString(),
+    window_start: new Date(windowStart).toISOString(),
+    request_count: requestCount,
+  });
 
   let body: { message?: string };
   try {

@@ -21,7 +21,7 @@ select cron.schedule(
     headers := jsonb_build_object(
       'Content-Type', 'application/json',
       'Authorization', 'Bearer ضع_مفتاح_anon_القديم_هنا',
-      'x-webhook-secret', ''
+      'x-webhook-secret', 'taleb-elm-webhook-9f3a7c2e1b'
     ),
     body := '{}'::jsonb
   );

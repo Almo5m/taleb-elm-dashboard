@@ -8,7 +8,9 @@
 -- ==========================================================
 create table if not exists public.ai_rate_limit (
   user_id uuid primary key references auth.users(id) on delete cascade,
-  last_request_at timestamptz not null default now()
+  last_request_at timestamptz not null default now(),
+  window_start timestamptz not null default now(),
+  request_count int not null default 0
 );
 -- مفيش RLS ولا policies هنا عمدًا — الجدول ده بيتقرا ويتكتب من
 -- ai-assistant بمفتاح service_role بس، مش محتاج يبان لحد تاني خالص.
@@ -51,7 +53,7 @@ select cron.schedule(
     headers := jsonb_build_object(
       'Content-Type', 'application/json',
       'Authorization', 'Bearer ضع_مفتاح_anon_القديم_هنا',
-      'x-webhook-secret', ''
+      'x-webhook-secret', 'taleb-elm-webhook-9f3a7c2e1b'
     ),
     body := '{}'::jsonb
   );
