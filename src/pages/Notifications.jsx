@@ -1,14 +1,11 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
-import { useAppUser } from '../context/AppUser';
 import { PageHeader, Spinner, Stamp, EmptyState, useToast, useConfirm } from '../components/UI';
-import { logAction } from '../lib/audit';
 
 const STATUS_TONE = { pending: 'gold', sent: 'forest', failed: 'coral' };
 const STATUS_LABEL = { pending: 'معلّق', sent: 'اتبعت', failed: 'فشل' };
 
 export default function Notifications() {
-  const me = useAppUser();
   const toast = useToast();
   const confirm = useConfirm();
 
@@ -60,43 +57,46 @@ export default function Notifications() {
     return () => clearTimeout(t);
   }, [userQuery]);
 
+  const callSendFunction = async (body) => {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const { data, error } = await supabase.functions.invoke('send-push-notification', {
+      headers: { Authorization: `Bearer ${sessionData.session.access_token}` },
+      body,
+    });
+    if (error) {
+      // supabase-js بيرمي error هنا لو الفنكشن رجعت status غير 2xx (زي 403/502)
+      const context = await error.context?.json?.().catch(() => null);
+      return { error: context?.error || error.message };
+    }
+    return data;
+  };
+
   const sendBroadcast = async () => {
     if (!broadcastTitle.trim() || !broadcastBody.trim()) {
       toast('اكتب العنوان والنص الأول', 'error');
       return;
     }
-    const ok = await confirm('متأكد إنك عايز تبعت الإشعار ده لكل المستخدمين؟ الفعل ده مالوش رجوع بعد الإرسال الفعلي.', {
+    const ok = await confirm('متأكد إنك عايز تبعت الإشعار ده لكل المستخدمين؟ الفعل ده مالوش رجوع بعد الإرسال.', {
       danger: true,
       confirmLabel: 'إرسال للكل',
     });
     if (!ok) return;
 
     setSendingBroadcast(true);
-    const { error } = await supabase.from('push_notifications_log').insert({
+    const result = await callSendFunction({
       title: broadcastTitle.trim(),
       body: broadcastBody.trim(),
       target_type: 'all',
-      status: 'pending',
-      sent_by_admin_id: me?.id,
-      sent_by_admin_name: me?.name || 'أدمن',
     });
     setSendingBroadcast(false);
 
-    if (error) {
-      toast('حصل خطأ، حاول تاني', 'error');
-      return;
+    if (result?.error) {
+      toast(result.error, 'error');
+    } else {
+      toast(`اتبعت لـ ${result.sent} من ${result.total} جهاز${result.failed ? ` (فشل ${result.failed})` : ''}`, 'success');
+      setBroadcastTitle('');
+      setBroadcastBody('');
     }
-    logAction({
-      adminId: me?.id,
-      adminName: me?.name || 'أدمن',
-      action: 'إرسال إشعار عام',
-      targetType: 'notification',
-      targetId: null,
-      details: { title: broadcastTitle.trim() },
-    });
-    toast('اتسجّل الإشعار — هيتبعت فعليًا بعد ما يتكامل التطبيق مع Firebase', 'success');
-    setBroadcastTitle('');
-    setBroadcastBody('');
     loadLog();
   };
 
@@ -110,51 +110,34 @@ export default function Notifications() {
       return;
     }
     setSendingSingle(true);
-    const { error } = await supabase.from('push_notifications_log').insert({
+    const result = await callSendFunction({
       title: singleTitle.trim(),
       body: singleBody.trim(),
       target_type: 'single_user',
       target_user_id: selectedUser.id,
-      status: 'pending',
-      sent_by_admin_id: me?.id,
-      sent_by_admin_name: me?.name || 'أدمن',
     });
     setSendingSingle(false);
 
-    if (error) {
-      toast('حصل خطأ، حاول تاني', 'error');
-      return;
+    if (result?.error) {
+      toast(result.error, 'error');
+    } else {
+      toast(`اتبعت لـ ${result.sent} من ${result.total} جهاز${result.failed ? ` (فشل ${result.failed})` : ''}`, 'success');
+      setSingleTitle('');
+      setSingleBody('');
+      setSelectedUser(null);
+      setUserQuery('');
     }
-    logAction({
-      adminId: me?.id,
-      adminName: me?.name || 'أدمن',
-      action: 'إرسال إشعار لمستخدم واحد',
-      targetType: 'notification',
-      targetId: selectedUser.id,
-      details: { title: singleTitle.trim(), target: selectedUser.name },
-    });
-    toast('اتسجّل الإشعار — هيتبعت فعليًا بعد ما يتكامل التطبيق مع Firebase', 'success');
-    setSingleTitle('');
-    setSingleBody('');
-    setSelectedUser(null);
-    setUserQuery('');
     loadLog();
   };
 
   return (
     <div>
       <PageHeader eyebrow="تواصل" title="الإشعارات" />
-      <div className="card p-4 mb-6 bg-gold/10 border border-gold/30">
-        <p className="text-sm">
-          ⚠️ الإرسال الفعلي لسه مش شغال — التطبيق محتاج يتكامل مع Firebase Cloud Messaging الأول.
-          دلوقتي أي إشعار بتبعته بيتسجّل بحالة <b>"معلّق"</b> وهيتبعت فعليًا لما التكامل يخلص.
-        </p>
-      </div>
 
       <div className="grid md:grid-cols-2 gap-5 mb-6">
         <div className="card p-6">
           <p className="font-messiri font-bold mb-1">إشعار عام لكل المستخدمين</p>
-          <p className="text-xs text-muted mb-4">هيوصل لكل الطلاب المسجّلين</p>
+          <p className="text-xs text-muted mb-4">هيوصل لكل جهاز مسجّل توكن</p>
           <input
             value={broadcastTitle}
             onChange={(e) => setBroadcastTitle(e.target.value)}
@@ -169,7 +152,7 @@ export default function Notifications() {
             className="input-field mb-3"
           />
           <button onClick={sendBroadcast} disabled={sendingBroadcast} className="btn-primary w-full">
-            {sendingBroadcast ? 'جارِ التسجيل...' : 'إرسال لكل المستخدمين'}
+            {sendingBroadcast ? 'جارِ الإرسال...' : 'إرسال لكل المستخدمين'}
           </button>
         </div>
 
@@ -214,7 +197,7 @@ export default function Notifications() {
             className="input-field mb-3"
           />
           <button onClick={sendSingle} disabled={sendingSingle} className="btn-primary w-full">
-            {sendingSingle ? 'جارِ التسجيل...' : 'إرسال لهذا المستخدم بس'}
+            {sendingSingle ? 'جارِ الإرسال...' : 'إرسال لهذا المستخدم بس'}
           </button>
         </div>
       </div>
@@ -233,6 +216,7 @@ export default function Notifications() {
                 <p className="text-xs text-muted truncate">{n.body}</p>
                 <p className="text-[11px] text-muted mt-1">
                   {n.target_type === 'all' ? 'لكل المستخدمين' : 'مستخدم واحد'} — {new Date(n.sent_at).toLocaleString('ar-EG')}
+                  {n.error_message && ` — ${n.error_message}`}
                 </p>
               </div>
               <Stamp tone={STATUS_TONE[n.status]}>{STATUS_LABEL[n.status]}</Stamp>
