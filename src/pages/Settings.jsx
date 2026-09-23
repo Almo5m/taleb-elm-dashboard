@@ -57,6 +57,11 @@ export default function Settings() {
   const [downloadUrl, setDownloadUrl] = useState('');
   const [savingVersion, setSavingVersion] = useState(false);
 
+  // روابط عامة (تغيير كلمة المرور + تقييم التطبيق)
+  const [passwordResetUrl, setPasswordResetUrl] = useState('');
+  const [ratingUrl, setRatingUrl] = useState('');
+  const [savingLinks, setSavingLinks] = useState(false);
+
   // المساعد الذكي
   const AI_DEFAULTS = { enabled: false, daily_limit_per_user: 20, monthly_limit_global: 3000, model: 'gemini-2.5-flash-lite' };
   const [aiAssistant, setAiAssistant] = useState(AI_DEFAULTS);
@@ -66,12 +71,14 @@ export default function Settings() {
   useEffect(() => {
     (async () => {
       setLoading(true);
-      const [msgs, contactLinks, maint, ver, ai] = await Promise.all([
+      const [msgs, contactLinks, maint, ver, ai, pwResetUrl, ratingLink] = await Promise.all([
         readSetting('focus_messages', []),
         readSetting('contact_links', {}),
         readSetting('maintenance', { enabled: false, message: '' }),
         readSetting('min_app_version', { android: '1.0.0', url: '' }),
         readSetting('ai_assistant', AI_DEFAULTS),
+        readSetting('password_reset_url', ''),
+        readSetting('rating_url', ''),
       ]);
       setMessages(Array.isArray(msgs) ? msgs : []);
       setContact(contactLinks || {});
@@ -79,6 +86,8 @@ export default function Settings() {
       setMinVersion(ver?.android || '1.0.0');
       setDownloadUrl(ver?.url || '');
       setAiAssistant({ ...AI_DEFAULTS, ...(ai || {}) });
+      setPasswordResetUrl(pwResetUrl || '');
+      setRatingUrl(ratingLink || '');
       setLoading(false);
     })();
   }, []);
@@ -165,6 +174,37 @@ export default function Settings() {
     toast('تم حفظ أقل إصدار مسموح');
   };
 
+  const isValidUrl = (url) => {
+    if (!url) return true; // فاضي مسموح — التطبيق هيستخدم القيمة الافتراضية المدمجة
+    try {
+      const parsed = new URL(url);
+      return ['http:', 'https:'].includes(parsed.protocol);
+    } catch {
+      return false;
+    }
+  };
+
+  const saveLinks = async () => {
+    if (!isValidUrl(passwordResetUrl)) {
+      toast('رابط تغيير كلمة المرور غير صحيح — لازم يبدأ بـ https://', 'error');
+      return;
+    }
+    if (!isValidUrl(ratingUrl)) {
+      toast('رابط تقييم التطبيق غير صحيح — لازم يبدأ بـ https://', 'error');
+      return;
+    }
+
+    setSavingLinks(true);
+    const [{ error: e1 }, { error: e2 }] = await Promise.all([
+      writeSetting('password_reset_url', passwordResetUrl),
+      writeSetting('rating_url', ratingUrl),
+    ]);
+    setSavingLinks(false);
+
+    if (e1 || e2) { toast('تعذّر الحفظ', 'error'); return; }
+    toast('تم حفظ الروابط');
+  };
+
   const saveAi = async () => {
     const dailyLimit = Number(aiAssistant.daily_limit_per_user);
     const monthlyLimit = Number(aiAssistant.monthly_limit_global);
@@ -244,6 +284,35 @@ export default function Settings() {
           value={downloadUrl}
           onChange={(e) => setDownloadUrl(e.target.value)}
           placeholder="رابط تحميل الـ APK مباشرة (مش رابط جوجل بلاي، التطبيق مش عليه)"
+          className="input-field mt-1"
+        />
+      </Section>
+
+      <Section
+        title="روابط عامة"
+        hint="رابط تغيير كلمة المرور اللي بيتبعت للطالب في الإيميل، ورابط تقييم التطبيق"
+        onSave={saveLinks}
+        saving={savingLinks}
+      >
+        <label className="text-xs text-muted font-semibold">رابط صفحة تغيير كلمة المرور</label>
+        <input
+          value={passwordResetUrl}
+          onChange={(e) => setPasswordResetUrl(e.target.value)}
+          placeholder="https://..."
+          className="input-field mt-1 mb-1"
+        />
+        <p className="text-[11px] text-coral-dark font-semibold mb-3">
+          ⚠️ تغيير الرابط هنا مش كافي لوحده — لازم تضيف نفس الرابط (أو نمط
+          عام زيه) في Supabase Dashboard → Authentication → URL
+          Configuration → Redirect URLs. من غيرها Supabase هترفض الرابط
+          تمامًا حتى لو اتغيّر هنا صح.
+        </p>
+
+        <label className="text-xs text-muted font-semibold">رابط تقييم التطبيق</label>
+        <input
+          value={ratingUrl}
+          onChange={(e) => setRatingUrl(e.target.value)}
+          placeholder="https://..."
           className="input-field mt-1"
         />
       </Section>
