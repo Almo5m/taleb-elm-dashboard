@@ -63,8 +63,13 @@ export default function Settings() {
   const [savingLinks, setSavingLinks] = useState(false);
 
   // المساعد الذكي
-  const AI_DEFAULTS = { enabled: false, daily_limit_per_user: 20, monthly_limit_global: 3000, model: 'gemini-2.5-flash-lite' };
+  // مفيش اسم موديل ثابت في الكود: الموديل الأساسي والبدائل كلها بتتكتب من هنا. الفاضي
+  // معناه "لسه متحددش" — الدالة بترفض الرد (ومحدش يقدر يفعّل بو) لحد ما الأساسي يتحط.
+  const AI_DEFAULTS = { enabled: false, daily_limit_per_user: 20, monthly_limit_global: 3000, model: '', fallback_models: [] };
+  const MODEL_ID_RE = /^[A-Za-z0-9._-]{1,80}$/; // نفس الفحص في Edge Function (الاسم بيدخل في رابط الطلب)
+  const MAX_FALLBACKS = 5;
   const [aiAssistant, setAiAssistant] = useState(AI_DEFAULTS);
+  const [newFallback, setNewFallback] = useState('');
   const [savingAi, setSavingAi] = useState(false);
   const [aiUsage, setAiUsage] = useState({ loading: true, count: null, error: false });
 
@@ -209,6 +214,7 @@ export default function Settings() {
     const dailyLimit = Number(aiAssistant.daily_limit_per_user);
     const monthlyLimit = Number(aiAssistant.monthly_limit_global);
     const model = (aiAssistant.model || '').trim();
+    const fallbacks = (aiAssistant.fallback_models || []).map((m) => String(m).trim()).filter(Boolean);
 
     if (!Number.isInteger(dailyLimit) || dailyLimit <= 0) {
       toast('الحد اليومي لكل طالب لازم يكون رقم صحيح أكبر من صفر', 'error');
@@ -219,7 +225,15 @@ export default function Settings() {
       return;
     }
     if (!model) {
-      toast('اسم الموديل مينفعش يبقى فاضي', 'error');
+      toast('الموديل الأساسي مينفعش يبقى فاضي', 'error');
+      return;
+    }
+    if (!MODEL_ID_RE.test(model)) {
+      toast('اسم الموديل الأساسي فيه رموز مش مسموحة (حروف إنجليزي وأرقام و . _ - بس)', 'error');
+      return;
+    }
+    if (fallbacks.some((m) => m === model)) {
+      toast('الموديل الأساسي موجود كمان في البدائل — شيله من هناك', 'error');
       return;
     }
 
@@ -229,11 +243,35 @@ export default function Settings() {
       daily_limit_per_user: dailyLimit,
       monthly_limit_global: monthlyLimit,
       model,
+      fallback_models: fallbacks,
     });
     setSavingAi(false);
     if (error) { toast('تعذّر الحفظ', 'error'); return; }
-    setAiAssistant({ enabled: aiAssistant.enabled, daily_limit_per_user: dailyLimit, monthly_limit_global: monthlyLimit, model });
+    setAiAssistant({ enabled: aiAssistant.enabled, daily_limit_per_user: dailyLimit, monthly_limit_global: monthlyLimit, model, fallback_models: fallbacks });
     toast(aiAssistant.enabled ? 'تم حفظ إعدادات المساعد الذكي — الميزة مفعّلة' : 'تم حفظ إعدادات المساعد الذكي');
+  };
+
+  // ---- بدائل الموديل (بتتجرّب بالترتيب لو الأساسي فشل) ----
+  const addFallback = () => {
+    const m = newFallback.trim();
+    if (!m) return;
+    if (!MODEL_ID_RE.test(m)) { toast('الاسم فيه رموز مش مسموحة (حروف إنجليزي وأرقام و . _ - بس)', 'error'); return; }
+    const current = aiAssistant.fallback_models || [];
+    if (m === (aiAssistant.model || '').trim() || current.includes(m)) { toast('الموديل ده موجود بالفعل', 'error'); return; }
+    if (current.length >= MAX_FALLBACKS) { toast(`الحد الأقصى ${MAX_FALLBACKS} بدائل`, 'error'); return; }
+    setAiAssistant({ ...aiAssistant, fallback_models: [...current, m] });
+    setNewFallback('');
+  };
+
+  const removeFallback = (i) =>
+    setAiAssistant({ ...aiAssistant, fallback_models: (aiAssistant.fallback_models || []).filter((_, idx) => idx !== i) });
+
+  const moveFallback = (i, dir) => {
+    const list = [...(aiAssistant.fallback_models || [])];
+    const j = i + dir;
+    if (j < 0 || j >= list.length) return;
+    [list[i], list[j]] = [list[j], list[i]];
+    setAiAssistant({ ...aiAssistant, fallback_models: list });
   };
 
   if (loading) return <Spinner />;
@@ -357,13 +395,54 @@ export default function Settings() {
           </div>
         </div>
 
-        <label className="text-xs text-muted font-semibold">اسم الموديل</label>
+        <label className="text-xs text-muted font-semibold">الموديل الأساسي</label>
         <input
           value={aiAssistant.model}
           onChange={(e) => setAiAssistant({ ...aiAssistant, model: e.target.value })}
+          placeholder="اكتب اسم الموديل بالظبط زي ما هو في Google AI Studio"
           className="input-field mt-1"
+          dir="ltr"
         />
-        <p className="text-xs text-muted mt-1 mb-4">بيسمح بتغيير المزوّد لاحقًا من غير تحديث تطبيق</p>
+        <p className="text-xs text-muted mt-1 mb-4">
+          بيتغيّر في أي وقت من غير تحديث تطبيق ولا نشر دالة. من غير موديل أساسي، بو مش بيرد حتى لو متفعّل.
+        </p>
+
+        <label className="text-xs text-muted font-semibold">الموديلات البديلة (بالترتيب)</label>
+        <p className="text-xs text-muted mt-1 mb-2">
+          لو الأساسي فشل بعد محاولتين (ازدحام أو اتشال)، بو بيجرّب البدائل واحد ورا التاني. أقصى {MAX_FALLBACKS} بدائل.
+        </p>
+        <div className="flex gap-2 mb-3">
+          <input
+            value={newFallback}
+            onChange={(e) => setNewFallback(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && addFallback()}
+            placeholder="اسم موديل بديل"
+            className="input-field"
+            dir="ltr"
+          />
+          <button onClick={addFallback} className="btn-ghost shrink-0">إضافة</button>
+        </div>
+        {(aiAssistant.fallback_models || []).length === 0 ? (
+          <p className="text-sm text-muted mb-4">مفيش بدائل — لو الأساسي فشل بو هيرد بخطأ بعد المحاولتين</p>
+        ) : (
+          <div className="space-y-2 mb-4">
+            {(aiAssistant.fallback_models || []).map((m, i) => (
+              <div key={m} className="flex items-center justify-between gap-2 bg-parchment rounded-xl px-3 py-2">
+                <p className="text-sm font-semibold" dir="ltr">{i + 1}. {m}</p>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button onClick={() => moveFallback(i, -1)} disabled={i === 0} className="text-muted hover:text-ink font-bold px-1 disabled:opacity-30" title="أعلى">↑</button>
+                  <button
+                    onClick={() => moveFallback(i, 1)}
+                    disabled={i === (aiAssistant.fallback_models || []).length - 1}
+                    className="text-muted hover:text-ink font-bold px-1 disabled:opacity-30"
+                    title="أسفل"
+                  >↓</button>
+                  <button onClick={() => removeFallback(i)} className="text-muted hover:text-coral font-bold px-1" title="حذف">×</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         <div className="bg-parchment rounded-xl px-3 py-2.5">
           <p className="text-xs text-muted font-semibold mb-1">الاستهلاك الشهري الحالي</p>
