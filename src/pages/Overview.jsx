@@ -32,6 +32,7 @@ export default function Overview() {
   const [aiInfo, setAiInfo] = useState({ loading: true, error: false, enabled: false, count: null, limit: null, activeStudents: 0 });
   const [aiLeaderboard, setAiLeaderboard] = useState({ loading: true, rows: [] });
   const [recentQuestions, setRecentQuestions] = useState({ loading: true, rows: [] });
+  const [errors24h, setErrors24h] = useState(null); // null = لسه بيحمّل أو الجدول مش موجود
   const [health, setHealth] = useState({ status: 'idle', latencyMs: null });
 
   const checkHealth = async () => {
@@ -54,7 +55,19 @@ export default function Overview() {
     loadAiInfo();
     loadAiLeaderboard();
     loadRecentQuestions();
+    loadErrors24h();
   }, []);
+
+  // منفصلة عن load() عمدًا: لو supabase_client_errors.sql لسه ماتشغّلش، الكارت بس
+  // هيعرض "—" ومش هيكسر باقي صفحة النظرة العامة
+  const loadErrors24h = async () => {
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const { count, error } = await supabase
+      .from('client_errors')
+      .select('*', { count: 'exact', head: true })
+      .gte('created_at', since);
+    setErrors24h(error ? null : count ?? 0);
+  };
 
   const loadAiLeaderboard = async () => {
     try {
@@ -189,6 +202,7 @@ export default function Overview() {
     { label: 'الردود', value: stats.replies, icon: '✎', tone: 'ink' },
     { label: 'بلاغات معلّقة', value: stats.reports, icon: '⚑', tone: 'coral' },
     { label: 'حسابات محظورة', value: stats.banned, icon: '⊘', tone: 'coral' },
+    { label: 'أعطال آخر ٢٤ ساعة', value: errors24h ?? '—', icon: '⚠', tone: errors24h > 0 ? 'coral' : 'ink', to: '/client-errors' },
   ];
 
   if (loading) return <Spinner />;
@@ -199,16 +213,19 @@ export default function Overview() {
     <div>
       <PageHeader eyebrow="لوحة التحكم" title="نظرة عامة" />
 
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
-        {cards.map((c) => (
-          <div key={c.label} className="card p-5">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
+        {cards.map((c) => {
+          const Wrapper = c.to ? Link : 'div';
+          return (
+          <Wrapper key={c.label} {...(c.to ? { to: c.to } : {})} className="card p-5 block">
             <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg mb-3 ${c.tone === 'coral' ? 'bg-coral/10 text-coral' : 'bg-ink text-gold'}`}>
               {c.icon}
             </div>
             <p className="text-2xl font-extrabold font-messiri">{c.value}</p>
             <p className="text-sm text-muted">{c.label}</p>
-          </div>
-        ))}
+          </Wrapper>
+          );
+        })}
       </div>
 
       <div className="grid md:grid-cols-2 gap-5 mb-5">
