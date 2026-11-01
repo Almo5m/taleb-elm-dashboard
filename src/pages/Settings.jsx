@@ -3,6 +3,22 @@ import { supabase } from '../supabaseClient';
 import { PageHeader, Spinner, useToast } from '../components/UI';
 import { useAppUser } from '../context/AppUser';
 import { logAction } from '../lib/audit';
+import { validateHttpsUrl } from '../lib/url';
+import { diffFields } from '../lib/diff';
+
+// الصفحات القانونية (legal_links) ومشاركة التطبيق (share_settings): الحقول فاضية
+// لحد ما الأدمن يملاها — مفيش أي قيمة افتراضية في الكود، والتطبيق بيقول للطالب
+// "الرابط لسه مش متاح" لو ناقص.
+const LEGAL_FIELDS = [
+  { key: 'privacy', label: 'سياسة الخصوصية' },
+  { key: 'terms', label: 'شروط الاستخدام' },
+  { key: 'forum_rules', label: 'شروط استخدام المنتدى' },
+];
+const EMPTY_LEGAL = { privacy: '', terms: '', forum_rules: '' };
+const EMPTY_SHARE = { url: '', message: '' };
+const SHARE_MESSAGE_MAX = 300;
+
+const asText = (value) => (typeof value === 'string' ? value : '');
 
 const CONTACT_FIELDS = [
   { key: 'whatsapp', label: 'واتساب (رابط wa.me)' },
@@ -75,10 +91,18 @@ export default function Settings() {
   const [catchupEnabled, setCatchupEnabled] = useState(false);
   const [savingCatchup, setSavingCatchup] = useState(false);
 
+  // الصفحات القانونية + مشاركة التطبيق (القيمة المحفوظة بنحتفظ بيها عشان نعرف إيه اللي اتغيّر)
+  const [legal, setLegal] = useState(EMPTY_LEGAL);
+  const [legalSaved, setLegalSaved] = useState(EMPTY_LEGAL);
+  const [savingLegal, setSavingLegal] = useState(false);
+  const [share, setShare] = useState(EMPTY_SHARE);
+  const [shareSaved, setShareSaved] = useState(EMPTY_SHARE);
+  const [savingShare, setSavingShare] = useState(false);
+
   useEffect(() => {
     (async () => {
       setLoading(true);
-      const [msgs, contactLinks, maint, ver, ai, pwResetUrl, ratingLink, studyPlan] = await Promise.all([
+      const [msgs, contactLinks, maint, ver, ai, pwResetUrl, ratingLink, studyPlan, legalLinks, shareValue] = await Promise.all([
         readSetting('focus_messages', []),
         readSetting('contact_links', {}),
         readSetting('maintenance', { enabled: false, message: '' }),
@@ -87,6 +111,8 @@ export default function Settings() {
         readSetting('password_reset_url', ''),
         readSetting('rating_url', ''),
         readSetting('study_plan_settings', null),
+        readSetting('legal_links', null),
+        readSetting('share_settings', null),
       ]);
       setMessages(Array.isArray(msgs) ? msgs : []);
       setContact(contactLinks || {});
@@ -97,6 +123,12 @@ export default function Settings() {
       setPasswordResetUrl(pwResetUrl || '');
       setRatingUrl(ratingLink || '');
       setCatchupEnabled(studyPlan?.catchup_enabled === true);
+      const loadedLegal = Object.fromEntries(LEGAL_FIELDS.map((f) => [f.key, asText(legalLinks?.[f.key])]));
+      setLegal(loadedLegal);
+      setLegalSaved(loadedLegal);
+      const loadedShare = { url: asText(shareValue?.url), message: asText(shareValue?.message) };
+      setShare(loadedShare);
+      setShareSaved(loadedShare);
       setLoading(false);
     })();
   }, []);
@@ -212,6 +244,74 @@ export default function Settings() {
 
     if (e1 || e2) { toast('تعذّر الحفظ', 'error'); return; }
     toast('تم حفظ الروابط');
+  };
+
+  const openLink = (value) => window.open(value.trim(), '_blank', 'noopener,noreferrer');
+
+  const saveLegal = async () => {
+    const cleaned = {};
+    for (const field of LEGAL_FIELDS) {
+      const raw = legal[field.key].trim();
+      if (raw) {
+        const result = validateHttpsUrl(raw);
+        if (!result.ok) { toast(`${field.label}: ${result.error}`, 'error'); return; }
+      }
+      cleaned[field.key] = raw; // الفاضي مسموح (الصفحة لسه مش جاهزة)
+    }
+
+    const changes = diffFields(legalSaved, cleaned);
+    if (Object.keys(changes).length === 0) { toast('مفيش تغيير للحفظ'); return; }
+
+    setSavingLegal(true);
+    const { error } = await writeSetting('legal_links', cleaned);
+    setSavingLegal(false);
+    if (error) { toast('تعذّر الحفظ', 'error'); return; }
+
+    setLegal(cleaned);
+    setLegalSaved(cleaned);
+    logAction({
+      adminId: me?.id,
+      adminName: me?.name || 'أدمن',
+      action: 'تعديل روابط الصفحات القانونية',
+      targetType: 'app_settings',
+      targetId: 'legal_links',
+      details: { changed: changes },
+    });
+    toast('تم حفظ روابط الصفحات القانونية');
+  };
+
+  const saveShare = async () => {
+    const url = share.url.trim();
+    const message = share.message.trim();
+
+    if (!url) { toast('رابط التطبيق مطلوب', 'error'); return; }
+    const result = validateHttpsUrl(url);
+    if (!result.ok) { toast(`رابط التطبيق: ${result.error}`, 'error'); return; }
+    if (message.length > SHARE_MESSAGE_MAX) {
+      toast(`الرسالة أطول من ${SHARE_MESSAGE_MAX} حرف (${message.length})`, 'error');
+      return;
+    }
+
+    const cleaned = { url, message };
+    const changes = diffFields(shareSaved, cleaned);
+    if (Object.keys(changes).length === 0) { toast('مفيش تغيير للحفظ'); return; }
+
+    setSavingShare(true);
+    const { error } = await writeSetting('share_settings', cleaned);
+    setSavingShare(false);
+    if (error) { toast('تعذّر الحفظ', 'error'); return; }
+
+    setShare(cleaned);
+    setShareSaved(cleaned);
+    logAction({
+      adminId: me?.id,
+      adminName: me?.name || 'أدمن',
+      action: 'تعديل إعدادات مشاركة التطبيق',
+      targetType: 'app_settings',
+      targetId: 'share_settings',
+      details: { changed: changes },
+    });
+    toast('تم حفظ إعدادات المشاركة');
   };
 
   const saveCatchup = async () => {
@@ -340,6 +440,107 @@ export default function Settings() {
           placeholder="https://..."
           className="input-field mt-1"
         />
+      </Section>
+
+      <Section
+        title="مشاركة التطبيق"
+        hint="الرابط والرسالة اللي بتتبعت لما الطالب يضغط على زرار مشاركة التطبيق"
+        onSave={saveShare}
+        saving={savingShare}
+      >
+        <label className="text-xs text-muted font-semibold">رابط التطبيق (https فقط)</label>
+        <input
+          value={share.url}
+          onChange={(e) => setShare({ ...share, url: e.target.value })}
+          placeholder="https://..."
+          dir="ltr"
+          className="input-field mt-1 mb-1 text-left"
+        />
+        <div className="flex items-start gap-3 mb-4 min-h-[1.25rem]">
+          <div className="flex-1">
+            {share.url.trim() && !validateHttpsUrl(share.url).ok && (
+              <p className="text-[11px] text-coral-dark font-semibold">{validateHttpsUrl(share.url).error}</p>
+            )}
+            {!share.url.trim() && (
+              <p className="text-[11px] text-coral-dark font-semibold">
+                الرابط مطلوب — من غيره التطبيق هيقول للطالب إن المشاركة لسه مش متاحة
+              </p>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => openLink(share.url)}
+            disabled={!validateHttpsUrl(share.url).ok}
+            className="btn-ghost text-xs shrink-0"
+          >
+            افتح الرابط
+          </button>
+        </div>
+
+        <div className="flex items-center justify-between">
+          <label className="text-xs text-muted font-semibold">نص الرسالة</label>
+          <span className={`text-[11px] ${share.message.trim().length > SHARE_MESSAGE_MAX ? 'text-coral-dark font-bold' : 'text-muted'}`}>
+            {share.message.trim().length}/{SHARE_MESSAGE_MAX}
+          </span>
+        </div>
+        <textarea
+          value={share.message}
+          onChange={(e) => setShare({ ...share, message: e.target.value })}
+          placeholder="أنا بذاكر بطالب علم وبيساعدني أنظم يومي، جرّبه 👇"
+          rows={3}
+          dir="auto"
+          className="input-field mt-1 mb-4"
+        />
+
+        <p className="text-xs text-muted font-semibold mb-1">كده الطالب هيبعت:</p>
+        <div className="bg-parchment/60 rounded-lg p-3 text-sm whitespace-pre-wrap break-words" dir="auto" data-testid="share-preview">
+          {share.message.trim() ? share.message.trim() : <span className="text-muted">(من غير رسالة)</span>}
+          {'\n'}
+          {validateHttpsUrl(share.url).ok ? share.url.trim() : <span className="text-muted">(الرابط لسه مش متحدد)</span>}
+        </div>
+      </Section>
+
+      <Section
+        title="الصفحات القانونية"
+        hint="روابط صفحات الويب اللي التطبيق بيفتحها في المتصفح — الحقل الفاضي معناه إن الصفحة لسه مش جاهزة"
+        onSave={saveLegal}
+        saving={savingLegal}
+      >
+        {LEGAL_FIELDS.map((field, i) => {
+          const value = legal[field.key];
+          const trimmed = value.trim();
+          const check = trimmed ? validateHttpsUrl(trimmed) : null;
+          return (
+            <div key={field.key} className={i < LEGAL_FIELDS.length - 1 ? 'mb-4' : ''}>
+              <label className="text-xs text-muted font-semibold">{field.label}</label>
+              <div className="flex gap-2 mt-1">
+                <input
+                  value={value}
+                  onChange={(e) => setLegal({ ...legal, [field.key]: e.target.value })}
+                  placeholder="https://..."
+                  dir="ltr"
+                  className="input-field flex-1 text-left"
+                />
+                <button
+                  type="button"
+                  onClick={() => openLink(value)}
+                  disabled={!check?.ok}
+                  className="btn-ghost text-xs shrink-0"
+                >
+                  افتح الرابط
+                </button>
+              </div>
+              {!trimmed && (
+                <p className="text-[11px] text-coral-dark font-semibold mt-1">
+                  ⚠️ التطبيق هيقول للطالب إن الصفحة دي مش متاحة
+                </p>
+              )}
+              {check && !check.ok && (
+                <p className="text-[11px] text-coral-dark font-semibold mt-1">{check.error}</p>
+              )}
+            </div>
+          );
+        })}
       </Section>
 
       <Section
