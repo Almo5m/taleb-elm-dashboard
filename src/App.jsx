@@ -17,6 +17,7 @@ import UserActivity from './pages/UserActivity';
 import Notifications from './pages/Notifications';
 import Emails from './pages/Emails';
 import ClientErrors from './pages/ClientErrors';
+import Unlockables from './pages/Unlockables';
 import AuditLog from './pages/AuditLog';
 import BannedWords from './pages/BannedWords';
 import Settings from './pages/Settings';
@@ -32,6 +33,7 @@ const navItems = [
   { to: '/user-activity', label: 'نشاط المستخدمين', icon: '⟳', adminOnly: true },
   { to: '/notifications', label: 'الإشعارات', icon: '🔔', adminOnly: true },
   { to: '/emails', label: 'الإيميلات', icon: '✉', adminOnly: true },
+  { to: '/unlockables', label: 'المميزات المقفولة', icon: '🔒', adminOnly: true },
   { to: '/client-errors', label: 'أعطال التطبيق', icon: '⚠', adminOnly: true },
   { to: '/announcement', label: 'رسالة عامة', icon: '✉', adminOnly: true },
   { to: '/study-plans', label: 'خطط مذاكرة', icon: '▤', adminOnly: true },
@@ -175,6 +177,7 @@ function Layout({ onLogout }) {
             <Route path="/user-activity" element={<AdminOnly><UserActivity /></AdminOnly>} />
             <Route path="/notifications" element={<AdminOnly><Notifications /></AdminOnly>} />
             <Route path="/emails" element={<AdminOnly><Emails /></AdminOnly>} />
+            <Route path="/unlockables" element={<AdminOnly><Unlockables /></AdminOnly>} />
             <Route path="/client-errors" element={<AdminOnly><ClientErrors /></AdminOnly>} />
             <Route path="/announcement" element={<AdminOnly><Announcement /></AdminOnly>} />
             <Route path="/study-plans" element={<AdminOnly><StudyPlans /></AdminOnly>} />
