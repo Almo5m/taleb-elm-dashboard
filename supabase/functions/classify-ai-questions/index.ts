@@ -1,6 +1,6 @@
 // supabase/functions/classify-ai-questions/index.ts
 //
-// بتتنادى مرة يوميًا (شوف supabase_backend_improvements_v2.sql) من
+// بتتنادى مرة يوميًا (شوف sql/supabase_backend_improvements_v2.sql) من
 // pg_cron. بتاخد لحد 50 سؤال متصنّفش لسه من ai_chat_logs، وتبعتهم كلهم في
 // طلب Gemini واحد بس (مش طلب لكل سؤال) عشان توفّر في استهلاك الـ API —
 // وترجّع تصنيف لكل واحد فيهم.

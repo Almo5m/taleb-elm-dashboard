@@ -1,14 +1,15 @@
 # لوحة تحكم طالب علم — دليل الرفع على Vercel
 
 ## 1) قبل أي حاجة: شغّل ملفات SQL في Supabase بالترتيب
-في `SQL Editor`، شغّل الملفات دي بالترتيب ده (تخطّى أي ملف سبق وشغّلته):
+في `SQL Editor`، شغّل الملفات دي بالترتيب ده (تخطّى أي ملف سبق وشغّلته).
+ملفات الـ SQL الخاصة باللوحة متجمّعة في فولدر `sql/`، وفيه `README.md` بالترتيب الكامل وحالة كل ملف:
 1. `supabase_setup.sql`
 2. `supabase_forum.sql`
 3. `supabase_admin.sql`
 4. `supabase_moderation.sql`
 5. `supabase_features.sql`
-6. `supabase_dashboard_v2.sql`
-7. **`supabase_dashboard_v3.sql`** (جديد — سجل النشاط، صلاحيات المشرف، الكلمات الممنوعة، الجدولة، الإعدادات العامة)
+6. `sql/supabase_dashboard_v2.sql`
+7. **`sql/supabase_dashboard_v3.sql`** (جديد — سجل النشاط، صلاحيات المشرف، الكلمات الممنوعة، الجدولة، الإعدادات العامة)
 
 ### ملف v2 الجديد بيعمل إيه بالظبط:
 - بيضيف عمود `email` لجدول `profiles` (لإرسال روابط تغيير كلمة المرور من اللوحة)، وبيعبّي الإيميلات للحسابات الموجودة
@@ -26,7 +27,7 @@
 ### تفعيل الجدولة التلقائية للرسائل (اختياري)
 لو عايز الرسائل المجدولة (`starts_at`/`ends_at`) تتفعّل/تتخفي أوتوماتيك بدون ما تدخل
 تشيلها يدوي: `Supabase Dashboard → Database → Extensions → ابحث عن pg_cron → Enable`،
-وبعدين أعد تشغيل `supabase_dashboard_v3.sql`. لو مش عايز الخطوة دي، كل حاجة تانية في
+وبعدين أعد تشغيل `sql/supabase_dashboard_v3.sql`. لو مش عايز الخطوة دي، كل حاجة تانية في
 الملف هتشتغل عادي، والرسائل هتفضل شغالة زي ما هي لحد ما تشيلها من اللوحة بنفسك.
 
 ## نشر خاصية "الحذف النهائي للحساب" (Edge Function)
@@ -116,18 +117,7 @@ git push -u origin main
 ### حاجة واحدة مقصودة إننا محضّرهاش
 **حذف حساب نهائيًا** من لوحة التحكم محتاج صلاحيات `service_role` بتاعة Supabase، ومفيش طريقة آمنة تحطها في كود موقع بيشتغل في متصفح المستخدم (أي حد يفتح Developer Tools هيقدر ياخدها ويتحكم في القاعدة بالكامل). البديل الآمن المتاح دلوقتي هو **الحظر** (بيمنع تسجيل الدخول فورًا). لو عايز حذف حقيقي لاحقًا، الطريقة الصح هي Supabase Edge Function منفصلة تستخدم service_role من السيرفر — ممكن نضيفها في خطوة تانية لو حبيت.
 
-## آخر تحديث — وصول Claude للوحة (MCP) + رصد استخدام الـ AI + تنبيهات تليجرام
-
-### MCP Server — قراءة فقط، من أي جهاز
-عملت سيرفر MCP منفصل (`mcp-server/`) منشور على Cloudflare Workers، بيخلي Claude
-(موبايل أو ويب) يوصل للوحة ويرد على أسئلة إدارية وإحصائية مباشرة، من غير ما
-يقدر يعدّل أي حاجة:
-
-- صلاحية القراءة مفروضة من الداتابيز نفسها (`mcp_readonly` role عنده SELECT
-  بس)، مش بس من كود الـ Worker — حتى لو حصل خطأ في الكود، الكتابة مرفوضة
-  أساسًا
-- تسجيل الدخول بنفس إيميل وباسورد الأدمن في اللوحة، بشرط `role = admin`
-- التفاصيل الكاملة وخطوات النشر في `mcp-server/README.md`
+## آخر تحديث — رصد استخدام الـ AI + تنبيهات تليجرام
 
 ### رصد استخدام الطلاب للـ AI
 - **`ai_chat_logs`**: بيسجّل سؤال الطالب بس (مش رد "بو")، وصول أدمن فقط،
@@ -155,10 +145,10 @@ git push -u origin main
 نشاط المنتدى، بلاغات الأسبوع، وأكتر طالب استخدامًا للـ AI.
 
 ### ملفات الـ SQL الجديدة (رتّبهم بالترتيب ده)
-8. `supabase_admin_improvements.sql` — `ai_chat_logs` + تنبيهات تليجرام
-9. `supabase_backend_improvements_v2.sql` — rate limiting، تصنيف الأسئلة،
+8. `sql/supabase_admin_improvements.sql` — `ai_chat_logs` + تنبيهات تليجرام
+9. `sql/supabase_backend_improvements_v2.sql` — rate limiting، تصنيف الأسئلة،
    retention إضافي للبلاغات المحلولة
-10. `supabase_backend_improvements_v3.sql` — جدولة التقرير الأسبوعي
+10. `sql/supabase_backend_improvements_v3.sql` — جدولة التقرير الأسبوعي
 
 كل ملف فيه تعليق `⚠️` على القيم اللي لازم تتغيّر (project ref، anon key،
 webhook secret) قبل التشغيل.
@@ -204,8 +194,8 @@ supabase functions deploy admin-ai-usage
 ### للتشغيل
 ```bash
 # 1) SQL بالترتيب ده في SQL Editor
-supabase_client_errors.sql
-supabase_client_errors_alert.sql   # بعد ما تحط الـ anon key والـ webhook secret
+sql/supabase_client_errors.sql
+sql/supabase_client_errors_alert.sql   # بعد ما تحط الـ anon key والـ webhook secret
 
 # 2) نشر الفنكشن
 supabase functions deploy client-errors-alert

@@ -1,6 +1,6 @@
 // supabase/functions/client-errors-alert/index.ts
 //
-// بتتنادى من pg_cron كل 30 دقيقة (شوف supabase_client_errors_alert.sql).
+// بتتنادى من pg_cron كل 30 دقيقة (شوف sql/supabase_client_errors_alert.sql).
 // لو عدد تقارير الأعطال في آخر 30 دقيقة وصل للحد (THRESHOLD)، بتبعت رسالة
 // تليجرام واحدة فيها أكتر الرسايل تكرارًا. عمدًا مفيش تنبيه لكل صف: الجدول
 // بيقبل إدخال مجهول، فتنبيه لكل صف كان هيغرق تليجرام لو حد أغرق الجدول.

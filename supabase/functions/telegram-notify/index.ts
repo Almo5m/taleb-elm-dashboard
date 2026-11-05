@@ -1,6 +1,6 @@
 // supabase/functions/telegram-notify/index.ts
 //
-// بيستقبل نداء من الـ Database Trigger (شوف supabase_admin_improvements.sql)
+// بيستقبل نداء من الـ Database Trigger (شوف sql/supabase_admin_improvements.sql)
 // مع اسم الجدول ونوع الحدث وبيانات الصف، وبيبعت رسالة تليجرام منسّقة
 // (HTML parse mode — عناوين بولد وأسطر واضحة).
 //

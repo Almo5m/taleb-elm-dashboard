@@ -155,7 +155,7 @@ export default function ClientErrors() {
       {loading ? (
         <Spinner />
       ) : loadError ? (
-        <EmptyState icon="⚠" title="تعذّر تحميل التقارير" hint="تأكد إنك شغّلت supabase_client_errors.sql وإن حسابك أدمن" />
+        <EmptyState icon="⚠" title="تعذّر تحميل التقارير" hint="تأكد إنك شغّلت sql/supabase_client_errors.sql وإن حسابك أدمن" />
       ) : filtered.length === 0 ? (
         <EmptyState icon="✓" title="مفيش أعطال مسجّلة" />
       ) : view === 'grouped' ? (

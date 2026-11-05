@@ -179,7 +179,7 @@ Deno.serve(async (req) => {
   // بنسجّل سؤال الطالب بس (مش رد الـ AI) في ai_chat_logs عشان الأدمن يقدر
   // يراجع هل الاستخدام في المنهج ولا لأ — بمحاولة أفضل جهد (best-effort)،
   // يعني لو فشل التسجيل لأي سبب، متوقفش رد الطالب خالص. الجدول ده بيتمسح
-  // منه تلقائيًا أي صف أقدم من 60 يوم (شوف supabase_admin_improvements.sql)
+  // منه تلقائيًا أي صف أقدم من 60 يوم (شوف sql/supabase_admin_improvements.sql)
   admin
     .from('ai_chat_logs')
     .insert({ user_id: userId, question: message })

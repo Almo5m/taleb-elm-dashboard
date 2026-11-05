@@ -58,7 +58,7 @@ export default function Overview() {
     loadErrors24h();
   }, []);
 
-  // منفصلة عن load() عمدًا: لو supabase_client_errors.sql لسه ماتشغّلش، الكارت بس
+  // منفصلة عن load() عمدًا: لو sql/supabase_client_errors.sql لسه ماتشغّلش، الكارت بس
   // هيعرض "—" ومش هيكسر باقي صفحة النظرة العامة
   const loadErrors24h = async () => {
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();

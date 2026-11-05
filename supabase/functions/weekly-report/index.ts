@@ -1,6 +1,6 @@
 // supabase/functions/weekly-report/index.ts
 //
-// بتتنادى مرة كل أسبوع (شوف supabase_backend_improvements_v3.sql) من
+// بتتنادى مرة كل أسبوع (شوف sql/supabase_backend_improvements_v3.sql) من
 // pg_cron، وبتبعت ملخص أسبوعي على تليجرام: طلاب جدد، أكتر طالب استخدامًا
 // للـ AI، بلاغات الأسبوع، وعدد الطلاب "في خطر" أو "منقطعين".
 //
