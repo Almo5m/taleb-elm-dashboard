@@ -1,10 +1,20 @@
+// حماية من CSV injection: أي نص بيبدأ بـ = + - @ (أو tab / CR) إكسل ممكن يتعامل
+// معاه كمعادلة (مثلًا اسم طالب =HYPERLINK(...)). بنحط قبله ' فيتعرض كنص عادي.
+// الأرقام الحقيقية (typeof number) مش بتتأثر، بس النصوص اللي شكلها رقم سالب هتتعلّم.
+const FORMULA_PREFIX = /^[=+\-@\t\r]/;
+
+export function neutralizeCsvValue(value) {
+  if (typeof value !== 'string') return value;
+  return FORMULA_PREFIX.test(value) ? `'${value}` : value;
+}
+
 export function exportToCsv(filename, rows, columns) {
   // columns: [{ key, label }]
   const header = columns.map((c) => `"${c.label.replace(/"/g, '""')}"`).join(',');
   const lines = rows.map((row) =>
     columns
       .map((c) => {
-        const value = row[c.key] ?? '';
+        const value = neutralizeCsvValue(row[c.key] ?? '');
         return `"${String(value).replace(/"/g, '""')}"`;
       })
       .join(',')
