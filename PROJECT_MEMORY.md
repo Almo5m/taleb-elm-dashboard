@@ -22,19 +22,21 @@ React + Vite على Vercel (بيبني تلقائي من `main`)، والباك 
 - **الأسرار:** `WEBHOOK_SECRET` اتغيّر 2026-11-04 (القيمة مش محفوظة في أي ملف، ومتتكتبش).
 - **الإشعارات:** تليجرام (للأدمن) شغال، Push شغال، الإيميل مؤجل.
 - **المميزات المقفولة:** صفحة اللوحة شغّالة وبتحفظ في `app_settings` (مفتاح `unlockables`). **التطبيق لسه مش بيقرأها**، فمفيش أي أثر على الطلاب.
+- **MCP:** اتحذف بالكامل (Worker و`OAUTH_KV` من Cloudflare، وrole `mcp_readonly` من Supabase، وconnector من Claude).
 - **الأمان:** trigger منع تصعيد الصلاحيات شغال، قراءة `user_stats` للمسجّلين بس، حماية CSV injection في كل صفحات التصدير.
 
 ## قرارات ثابتة (متتفتحش من غير سبب)
 - المنهج (إدارة الدروس + لوحة التغطية + محرك الخطة) اتلغى. اللي فضل سويتش `catchup_enabled` بس. صفحة "خطط مذاكرة" القديمة متتلمسش.
+- **مفيش حسابات بالوقت على السيرفر لأرقام الطلاب** (التطبيق أوفلاين، وفيه تسجيل يدوي لجلسات قديمة ووضع ضيف). الحماية بقيم مستحيلة + مراقبة، مش بمنع كامل.
 - الإيميلات مؤجلة لحد دومين خاص.
 - صفحة `/email-confirmed` اتشالت.
 - موديل المساعد بيتحدد من `ai_assistant.model` في Settings (الافتراضي في الكود ممكن يرجّع 404).
 - الـ anon key في ملفات SQL لازم يكون الـ Legacy (بيبدأ بـ `eyJ`) مش `sb_publishable_`.
 
 ## شغل مفتوح
-- حذف الـ MCP (Cloudflare + role في Supabase + connector من Claude).
 - ربط المميزات المقفولة بالتطبيق.
-- الطالب لسه يقدر يعدّل أرقامه في `user_stats` (غش في المتصدرين).
+- غش `user_stats`: `sql/supabase_user_stats_guard.sql` جاهز ومتجرّب محليًا ومستني يتشغّل في Supabase (وضع log أول أسبوعين). مفيش مرحلة تانية على السيرفر (التطبيق أوفلاين).
+- `updated_at` في `user_stats` بيتبعت من التطبيق من غير timezone (بيطلع قدّام بساعتين)، والحل في التطبيق: `.toUtc()` (بند 9 في `PROBLEMS_LOG.md`).
 - نشر النصوص القانونية وضبط `legal_links` و`share_settings` من Settings.
 - تفعيل 2FA على حساب Supabase.
 - Deep Links (في التطبيق)، تقييم 👍/👎 لردود "بو"، الإيميلات.
@@ -57,7 +59,7 @@ git add . ; git commit -m "..." ; git push origin main
 - تليجرام، التقرير الأسبوعي، تصنيف أسئلة المساعد، rate limit، تنظيف دوري للبيانات.
 - شلنا كلمة سر ثابتة كانت في كود `BannedWords.jsx` وبقت تأكيد باسورد حسابك.
 - Security headers + CSP على Vercel.
-- بُني MCP Server على Cloudflare (قراءة فقط) وعمره ما اتستخدم.
+- بُني MCP Server على Cloudflare (قراءة فقط) وعمره ما اتستخدم (اتحذف 2026-11-05).
 
 ### 2026-11-04
 - فحص الـ DB: trigger الأمان شغّال، لكن `supabase_rate_limit_upgrade.sql` و`supabase_client_errors_alert.sql` ماكانوش متشغّلين.
@@ -72,4 +74,8 @@ git add . ; git commit -m "..." ; git push origin main
 - `sql/supabase_user_stats_privacy.sql`: اتشغّل ونجح.
 - إنشاء ملفي الذاكرة والمشاكل.
 - تجميع كل ملفات SQL في `sql/` + إضافة `sql/README.md` و`sql/verify_db_state.sql`.
-- شلنا `mcp-server/` من الريبو وبنفّذ حذفه من Cloudflare وSupabase (لما يخلص نسجّل هنا).
+- شلنا `mcp-server/` من الريبو، وحذفنا الـ MCP بالكامل من Cloudflare وSupabase وClaude. الحذف من Supabase احتاج `grant mcp_readonly to postgres` الأول (شوف `PROBLEMS_LOG.md` بند 7).
+- فحص `user_stats`: الأعمدة (`user_id, display_name, avatar_url, total_study_hours, current_streak, achievements_count, updated_at`)، policy قراءة لكل المسجّلين، وpolicy `ALL` على الصف الخاص بالطالب (كتابة حرة)، ومفيش triggers. وauthenticated معاه TRUNCATE/REFERENCES/TRIGGER بالافتراض.
+- قرأنا كود التطبيق (Flutter): الإجماليات بتتحسب من قاعدة محلية وبتتبعت كلها في upsert عند كل فتح وبعد كل حدث. فيه تسجيل يدوي (`source = manual`) ووضع ضيف. صممنا الحارس من غير أي حساب بالوقت (بند 8 في `PROBLEMS_LOG.md`).
+- كتبنا `sql/supabase_user_stats_guard.sql`: قيم مستحيلة (سالب، ساعات > 15000، streak > 2000، إنجازات أكتر من اللي الأرقام بتسمح بيه من `achievements_catalog`، نصوص طويلة) + مراقبة (ساعات > 2000 أو قفزة > 200). وضعين `log` (افتراضي) و`clamp`. اتجرّب على Postgres محلي (13 سيناريو).
+- ملحوظة: عمود `user_stats` فيه `total_study_hours` و`current_streak` بس. باقي شروط المميزات المقفولة (مهام، محاضرات، واجبات، امتحانات، متوسط الدرجات) مش موجودة على السيرفر، فبتتحسب جوه التطبيق.

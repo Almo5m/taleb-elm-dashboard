@@ -16,9 +16,9 @@ from (
          exists(select 1 from pg_trigger where tgname = 'client_errors_limit_trigger')
   union all select 'cron: ' || j, exists(select 1 from cron.job where jobname = j)
          from unnest(array['ai_chat_logs_cleanup','classify_ai_questions_daily','forum_reports_cleanup',
-                           'weekly_report','client_errors_alert','client_errors_cleanup']) as j
+                           'weekly_report','client_errors_alert','client_errors_cleanup','user_stats_flags_cleanup']) as j
   union all select 'table: ' || t, to_regclass('public.' || t) is not null
-         from unnest(array['ai_chat_logs','ai_rate_limit','client_errors','device_tokens','push_notifications_log']) as t
+         from unnest(array['ai_chat_logs','ai_rate_limit','client_errors','device_tokens','push_notifications_log','user_stats_flags','user_stats_guard_config']) as t
   union all select 'ai_rate_limit.' || c || ' (rate_limit_upgrade)',
          exists(select 1 from information_schema.columns
                 where table_schema = 'public' and table_name = 'ai_rate_limit' and column_name = c)
@@ -29,6 +29,10 @@ from (
                       and cmd in ('SELECT','ALL') and roles @> array['public']::name[])
   union all select 'user_stats: anon مالوش صلاحية قراءة',
          not has_table_privilege('anon', 'public.user_stats', 'SELECT')
+  union all select 'trigger: user_stats_guard_trigger (user_stats_guard)',
+         exists(select 1 from pg_trigger where tgname = 'user_stats_guard_trigger')
+  union all select 'user_stats: authenticated مالوش TRUNCATE',
+         not has_table_privilege('authenticated', 'public.user_stats', 'TRUNCATE')
   union all select 'مفيش placeholder متسيّب في الـ cron',
          not exists(select 1 from cron.job where strpos(command, 'ضع_') > 0)
   union all select 'مفيش placeholder في notify_telegram',

@@ -4,6 +4,8 @@
 (anon key من الـ Legacy بيبدأ بـ `eyJ`، وسر الـ webhook) **من غير علامتي `< >`**.
 
 للتأكد من اللي اتشغّل فعلًا: شغّل `verify_db_state.sql` (قراءة بس).
+أدوات فحص تانية (قراءة بس): `inspect_user_stats.sql` (أعمدة وpolicies جدول user_stats).
+لمراجعة مخالفات الحارس: `select * from public.user_stats_flags order by created_at desc limit 50;` والوضع الحالي: `select mode from public.user_stats_guard_config;`
 
 | الملف | بيعمل إيه | الحالة (2026-11-05) |
 |---|---|---|
@@ -22,6 +24,7 @@
 | `supabase_client_errors.sql` | جدول أعطال التطبيق + حد الإغراق | اتشغّل |
 | `supabase_client_errors_alert.sql` | تنبيه الأعطال + تنظيفها (cron) | اتشغّل (2026-11-04) |
 | `supabase_user_stats_privacy.sql` | قراءة user_stats للمسجّلين بس | اتشغّل (2026-11-05) |
+| `supabase_user_stats_guard.sql` | حارس يكشف القيم المستحيلة في أرقام المتصدرين (وضع log ثم clamp)، من غير حسابات وقت | جاهز، لسه مااتشغّلش |
 | `supabase_emails.sql` | الإيميلات | مؤجل (محتاج دومين خاص) |
 
 ملفات الأصل (`supabase_setup/forum/admin/moderation/features.sql`) في ريبو التطبيق مش هنا.
