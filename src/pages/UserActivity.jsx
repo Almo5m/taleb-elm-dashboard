@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
-import { PageHeader, Spinner, Stamp, EmptyState } from '../components/UI';
+import { PageHeader, Spinner, Stamp, EmptyState, useToast } from '../components/UI';
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -22,6 +22,7 @@ function activityLabel(updatedAt) {
 }
 
 export default function UserActivity() {
+  const toast = useToast();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [sortDir, setSortDir] = useState('desc'); // desc = الأحدث نشاطًا فوق
@@ -36,7 +37,10 @@ export default function UserActivity() {
       .from('user_stats')
       .select('user_id, display_name, avatar_url, updated_at')
       .order('updated_at', { ascending: false, nullsFirst: false });
-    if (error) console.error('User activity load error:', error);
+    if (error) {
+      console.error('User activity load error:', error);
+      toast('تعذّر تحميل نشاط الطلاب', 'error', error);
+    }
     setRows(data || []);
     setLoading(false);
   };

@@ -187,7 +187,7 @@ export default function Unlockables() {
     const result = validateUnlockables(items);
     if (!result.ok) {
       setSaveErrors(result.errors);
-      toast(`فيه ${result.errors.length} قاعدة فيها مشاكل — مفيش حاجة اتحفظت`, 'error');
+      toast(`فيه ${result.errors.length} قاعدة فيها مشاكل — مفيش حاجة اتحفظت`, 'error', result.errors);
       return;
     }
     setSaveErrors([]);
@@ -205,7 +205,7 @@ export default function Unlockables() {
     const current = await fetchSetting(SETTING_KEY);
     if (current.error) {
       setSaving(false);
-      toast('تعذّر التأكد من آخر نسخة — حاول تاني', 'error');
+      toast('تعذّر التأكد من آخر نسخة — حاول تاني', 'error', current.error);
       return;
     }
     if (canonical(current.value ?? []) !== baseRef.current) {
@@ -218,7 +218,7 @@ export default function Unlockables() {
     const { error } = await writeSetting(SETTING_KEY, result.items);
     setSaving(false);
     if (error) {
-      toast('تعذّر الحفظ', 'error');
+      toast('تعذّر الحفظ', 'error', error);
       return;
     }
 

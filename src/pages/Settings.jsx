@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
-import { PageHeader, Spinner, useToast } from '../components/UI';
+import { PageHeader, Spinner, CopyButton, useToast } from '../components/UI';
 import { useAppUser } from '../context/AppUser';
 import { logAction } from '../lib/audit';
 import { validateHttpsUrl } from '../lib/url';
@@ -31,7 +31,8 @@ const CONTACT_FIELDS = [
 ];
 
 async function readSetting(key, fallback) {
-  const { data } = await supabase.from('app_settings').select('value').eq('key', key).maybeSingle();
+  const { data, error } = await supabase.from('app_settings').select('value').eq('key', key).maybeSingle();
+  if (error) throw error; // لو القراءة فشلت مانعرضش قيم افتراضية، لأن الحفظ بعدها كان هيمسح الإعدادات الحقيقية
   return data?.value ?? fallback;
 }
 
@@ -55,6 +56,7 @@ function Section({ title, hint, children, onSave, saving }) {
 
 export default function Settings() {
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const toast = useToast();
 
   // رسائل تحفيزية
@@ -99,9 +101,10 @@ export default function Settings() {
   const [shareSaved, setShareSaved] = useState(EMPTY_SHARE);
   const [savingShare, setSavingShare] = useState(false);
 
-  useEffect(() => {
-    (async () => {
+  const loadSettings = async () => {
       setLoading(true);
+      setLoadError(null);
+      try {
       const [msgs, contactLinks, maint, ver, ai, pwResetUrl, ratingLink, studyPlan, legalLinks, shareValue] = await Promise.all([
         readSetting('focus_messages', []),
         readSetting('contact_links', {}),
@@ -129,8 +132,15 @@ export default function Settings() {
       const loadedShare = { url: asText(shareValue?.url), message: asText(shareValue?.message) };
       setShare(loadedShare);
       setShareSaved(loadedShare);
+      } catch (err) {
+        setLoadError(err);
+        toast('تعذّر تحميل الإعدادات — ماتحفظش حاجة قبل ما تعيد المحاولة', 'error', err);
+      }
       setLoading(false);
-    })();
+  };
+
+  useEffect(() => {
+    loadSettings();
   }, []);
 
   useEffect(() => {
@@ -161,7 +171,7 @@ export default function Settings() {
     setSavingMessages(true);
     const { error } = await writeSetting('focus_messages', messages);
     setSavingMessages(false);
-    if (error) { toast('تعذّر الحفظ', 'error'); return; }
+    if (error) { toast('تعذّر الحفظ', 'error', error); return; }
     toast('تم حفظ الرسائل التحفيزية');
   };
 
@@ -169,7 +179,7 @@ export default function Settings() {
     setSavingContact(true);
     const { error } = await writeSetting('contact_links', contact);
     setSavingContact(false);
-    if (error) { toast('تعذّر الحفظ', 'error'); return; }
+    if (error) { toast('تعذّر الحفظ', 'error', error); return; }
     toast('تم حفظ بيانات التواصل');
   };
 
@@ -177,7 +187,7 @@ export default function Settings() {
     setSavingMaintenance(true);
     const { error } = await writeSetting('maintenance', maintenance);
     setSavingMaintenance(false);
-    if (error) { toast('تعذّر الحفظ', 'error'); return; }
+    if (error) { toast('تعذّر الحفظ', 'error', error); return; }
     toast(maintenance.enabled ? 'تم تفعيل وضع الصيانة' : 'تم إيقاف وضع الصيانة');
   };
 
@@ -207,7 +217,7 @@ export default function Settings() {
     setSavingVersion(true);
     const { error } = await writeSetting('min_app_version', { android: version, url });
     setSavingVersion(false);
-    if (error) { toast('تعذّر الحفظ', 'error'); return; }
+    if (error) { toast('تعذّر الحفظ', 'error', error); return; }
     if (!url) {
       toast('تم الحفظ — لكن رابط التحميل فاضي، فزرار "تحديث الآن" هيفشل لأي مستخدم يوصله. حط الرابط قبل ما تفعّل إصدار أعلى من نسخته', 'error');
       return;
@@ -242,7 +252,7 @@ export default function Settings() {
     ]);
     setSavingLinks(false);
 
-    if (e1 || e2) { toast('تعذّر الحفظ', 'error'); return; }
+    if (e1 || e2) { toast('تعذّر الحفظ', 'error', e1 || e2); return; }
     toast('تم حفظ الروابط');
   };
 
@@ -265,7 +275,7 @@ export default function Settings() {
     setSavingLegal(true);
     const { error } = await writeSetting('legal_links', cleaned);
     setSavingLegal(false);
-    if (error) { toast('تعذّر الحفظ', 'error'); return; }
+    if (error) { toast('تعذّر الحفظ', 'error', error); return; }
 
     setLegal(cleaned);
     setLegalSaved(cleaned);
@@ -299,7 +309,7 @@ export default function Settings() {
     setSavingShare(true);
     const { error } = await writeSetting('share_settings', cleaned);
     setSavingShare(false);
-    if (error) { toast('تعذّر الحفظ', 'error'); return; }
+    if (error) { toast('تعذّر الحفظ', 'error', error); return; }
 
     setShare(cleaned);
     setShareSaved(cleaned);
@@ -318,7 +328,7 @@ export default function Settings() {
     setSavingCatchup(true);
     const { error } = await writeSetting('study_plan_settings', { catchup_enabled: catchupEnabled });
     setSavingCatchup(false);
-    if (error) { toast('تعذّر الحفظ', 'error'); return; }
+    if (error) { toast('تعذّر الحفظ', 'error', error); return; }
     logAction({
       adminId: me?.id,
       adminName: me?.name || 'أدمن',
@@ -356,12 +366,29 @@ export default function Settings() {
       model,
     });
     setSavingAi(false);
-    if (error) { toast('تعذّر الحفظ', 'error'); return; }
+    if (error) { toast('تعذّر الحفظ', 'error', error); return; }
     setAiAssistant({ enabled: aiAssistant.enabled, daily_limit_per_user: dailyLimit, monthly_limit_global: monthlyLimit, model });
     toast(aiAssistant.enabled ? 'تم حفظ إعدادات المساعد الذكي — الميزة مفعّلة' : 'تم حفظ إعدادات المساعد الذكي');
   };
 
   if (loading) return <Spinner />;
+  if (loadError) {
+    return (
+      <div className="card p-6 max-w-xl mx-auto mt-6">
+        <p className="font-messiri text-xl font-bold text-coral mb-1">الإعدادات ماتحمّلتش صح</p>
+        <p className="text-sm text-muted mb-4">
+          مخبّيت الصفحة عشان ماتشوفش قيم افتراضية وتحفظها بالغلط فوق الإعدادات الحقيقية. جرّب تاني، ولو المشكلة فضلت انسخ التفاصيل.
+        </p>
+        <div className="flex gap-2 flex-wrap">
+          <button type="button" className="btn-primary !px-3 !py-1.5 text-sm" onClick={loadSettings}>إعادة المحاولة</button>
+          <CopyButton
+            text={() => `${loadError.message || ''}\n${loadError.code || ''} ${loadError.details || ''} ${loadError.hint || ''}`.trim()}
+            label="نسخ تفاصيل الخطأ"
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>

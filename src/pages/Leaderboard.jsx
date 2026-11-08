@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
-import { PageHeader, Spinner, EmptyState, Stamp } from '../components/UI';
+import { PageHeader, Spinner, EmptyState, Stamp, useToast } from '../components/UI';
 import { exportToCsv } from '../lib/csv';
 
 export default function Leaderboard() {
+  const toast = useToast();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [sortBy, setSortBy] = useState('total_study_hours');
@@ -14,7 +15,8 @@ export default function Leaderboard() {
 
   const load = async () => {
     setLoading(true);
-    const { data } = await supabase.from('user_stats').select('*').order(sortBy, { ascending: false }).limit(50);
+    const { data, error } = await supabase.from('user_stats').select('*').order(sortBy, { ascending: false }).limit(50);
+    if (error) toast('تعذّر تحميل المتصدرين', 'error', error);
     setRows(data || []);
     setLoading(false);
   };

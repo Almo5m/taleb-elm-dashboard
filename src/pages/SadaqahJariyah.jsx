@@ -33,10 +33,11 @@ export default function SadaqahJariyah() {
 
   const load = async () => {
     setLoading(true);
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("sadaqah_jariyah")
       .select("*")
       .order("sort_order");
+    if (error) toast('تعذّر تحميل البيانات', 'error', error);
     setItems(data || []);
     setLoading(false);
   };
@@ -118,7 +119,8 @@ export default function SadaqahJariyah() {
       confirmLabel: "حذف",
     });
     if (!ok) return;
-    await supabase.from("sadaqah_jariyah").delete().eq("id", id);
+    const { error } = await supabase.from("sadaqah_jariyah").delete().eq("id", id);
+    if (error) { toast('تعذّر الحذف', 'error', error); return; }
     setItems((prev) => prev.filter((i) => i.id !== id));
     toast("تم الحذف");
   };

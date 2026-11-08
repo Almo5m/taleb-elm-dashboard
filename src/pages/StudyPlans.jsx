@@ -18,7 +18,8 @@ export default function StudyPlans() {
 
   const load = async () => {
     setLoading(true);
-    const { data } = await supabase.from('study_plan_tasks').select('*').order('created_at', { ascending: false });
+    const { data, error } = await supabase.from('study_plan_tasks').select('*').order('created_at', { ascending: false });
+    if (error) toast('تعذّر تحميل الخطط', 'error', error);
     setPlans(data || []);
     setLoading(false);
   };
@@ -32,7 +33,7 @@ export default function StudyPlans() {
       target_system: form.target_system || null,
       target_grade: form.target_grade || null,
     });
-    if (error) { toast('تعذّر إضافة المهمة', 'error'); return; }
+    if (error) { toast('تعذّر إضافة المهمة', 'error', error); return; }
     setForm({ subject_name: '', title: '', description: '', target_system: '', target_grade: '' });
     toast('تمت إضافة المهمة');
     load();
@@ -41,7 +42,8 @@ export default function StudyPlans() {
   const remove = async (id) => {
     const ok = await confirm('هتحذف المهمة دي من الخطط الجاهزة، متأكد؟', { danger: true, confirmLabel: 'حذف' });
     if (!ok) return;
-    await supabase.from('study_plan_tasks').delete().eq('id', id);
+    const { error } = await supabase.from('study_plan_tasks').delete().eq('id', id);
+    if (error) { toast('تعذّر حذف المهمة', 'error', error); return; }
     setPlans((prev) => prev.filter((p) => p.id !== id));
     toast('تم حذف المهمة');
   };

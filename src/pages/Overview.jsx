@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
-import { PageHeader, Spinner, Stamp } from '../components/UI';
+import { PageHeader, Spinner, Stamp, useToast } from '../components/UI';
 
 function topSubjects(threads) {
   const counts = {};
@@ -23,6 +23,7 @@ function daysAgoLabel(n) {
 }
 
 export default function Overview() {
+  const toast = useToast();
   const [stats, setStats] = useState({ users: 0, threads: 0, replies: 0, banned: 0, reports: 0 });
   const [weekly, setWeekly] = useState(Array(7).fill(0));
   const [activity, setActivity] = useState([]);
@@ -45,7 +46,8 @@ export default function Overview() {
       });
       if (error) throw error;
       setHealth({ status: 'ok', latencyMs: Math.round(performance.now() - started) });
-    } catch {
+    } catch (err) {
+      toast('فحص الاتصال فشل', 'error', err);
       setHealth({ status: 'error', latencyMs: Math.round(performance.now() - started) });
     }
   };
@@ -80,6 +82,7 @@ export default function Overview() {
       setAiLeaderboard({ loading: false, rows: data?.leaderboard ?? [] });
     } catch (err) {
       console.error('AI leaderboard error:', err);
+      toast('تعذّر تحميل أكتر الطلاب استخدامًا للمساعد', 'error', err);
       setAiLeaderboard({ loading: false, rows: [] });
     }
   };
@@ -105,6 +108,7 @@ export default function Overview() {
       });
     } catch (err) {
       console.error('Recent AI questions error:', err);
+      toast('تعذّر تحميل آخر أسئلة المساعد', 'error', err);
       setRecentQuestions({ loading: false, rows: [] });
     }
   };
@@ -129,7 +133,8 @@ export default function Overview() {
         limit: settings.monthly_limit_global ?? 3000,
         activeStudents: activeStudents || 0,
       });
-    } catch {
+    } catch (err) {
+      toast('تعذّر تحميل استخدام المساعد الذكي', 'error', err);
       setAiInfo((prev) => ({ ...prev, loading: false, error: true }));
     }
   };
@@ -163,7 +168,10 @@ export default function Overview() {
 
     // نطبع أي خطأ في الكونسول عشان تشخيص أسهل لو حصلت مشكلة تاني
     [usersRes, threadsRes, repliesRes, bannedRes, reportsRes, signupsRes, recentThreadsRes, recentReportsRes, subjectRowsRes].forEach((r) => {
-      if (r.error) console.error('Overview query error:', r.error);
+      if (r.error) {
+        console.error('Overview query error:', r.error);
+        toast('تعذّر تحميل جزء من إحصائيات الرئيسية', 'error', r.error);
+      }
     });
     setSignupsError(signupsRes.error ? signupsRes.error.message : null);
 

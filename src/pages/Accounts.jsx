@@ -31,7 +31,7 @@ export default function Accounts() {
       supabase.from('profiles').select('*').order('created_at', { ascending: false }),
       supabase.from('ai_access').select('*'),
     ]);
-    if (error) toast('تعذّر تحميل الحسابات', 'error');
+    if (error) toast('تعذّر تحميل الحسابات', 'error', error);
     setProfiles(data || []);
     if (!aiError && aiRows) {
       const map = {};
@@ -87,7 +87,7 @@ export default function Accounts() {
     const ok = await confirm(`هتحظر ${ids.length} حساب دفعة واحدة، متأكد؟`, { danger: true, confirmLabel: `حظر ${ids.length} حساب` });
     if (!ok) return;
     const { error } = await supabase.from('profiles').update({ banned: true }).in('id', ids);
-    if (error) { toast('حصل خطأ أثناء الحظر الجماعي', 'error'); return; }
+    if (error) { toast('حصل خطأ أثناء الحظر الجماعي', 'error', error); return; }
     setProfiles((prev) => prev.map((p) => (ids.includes(p.id) ? { ...p, banned: true } : p)));
     audit('bulk_ban', null, `حظر جماعي لـ ${ids.length} حساب`);
     toast(`تم حظر ${ids.length} حساب`);

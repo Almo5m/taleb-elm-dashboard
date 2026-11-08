@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
-import { PageHeader, Spinner, Stamp, useToast, useConfirm } from '../components/UI';
+import { PageHeader, Spinner, Stamp, CopyText, useToast, useConfirm } from '../components/UI';
 import { useAppUser } from '../context/AppUser';
 import { logAction } from '../lib/audit';
 
@@ -92,7 +92,7 @@ export default function StudentProfile() {
     setSavingForm(true);
     const { error } = await supabase.from('profiles').update(form).eq('id', id);
     setSavingForm(false);
-    if (error) { toast('تعذّر حفظ التعديل', 'error'); return; }
+    if (error) { toast('تعذّر حفظ التعديل', 'error', error); return; }
     setProfile((prev) => ({ ...prev, ...form }));
     audit('edit_profile', `تعديل بيانات ${form.name || id}`);
     toast('تم حفظ التعديلات');
@@ -108,7 +108,7 @@ export default function StudentProfile() {
     setSavingRole(true);
     const { error } = await supabase.from('profiles').update({ role: newRole }).eq('id', id);
     setSavingRole(false);
-    if (error) { toast('حصل خطأ، حاول تاني', 'error'); return; }
+    if (error) { toast('حصل خطأ، حاول تاني', 'error', error); return; }
     setProfile((prev) => ({ ...prev, role: newRole }));
     audit(newRole === 'student' ? 'demote' : 'promote', `تغيير دور ${profile.name || id} إلى ${newRole}`);
     toast('تم تحديث الصلاحية');
@@ -123,7 +123,7 @@ export default function StudentProfile() {
     setSavingBan(true);
     const { error } = await supabase.from('profiles').update({ banned: !profile.banned }).eq('id', id);
     setSavingBan(false);
-    if (error) { toast('حصل خطأ، حاول تاني', 'error'); return; }
+    if (error) { toast('حصل خطأ، حاول تاني', 'error', error); return; }
     setProfile((prev) => ({ ...prev, banned: !prev.banned }));
     audit(profile.banned ? 'unban' : 'ban', `${profile.banned ? 'إلغاء حظر' : 'حظر'} ${profile.name || id}`);
     toast(profile.banned ? 'تم إلغاء الحظر' : 'تم حظر الحساب');
@@ -134,7 +134,7 @@ export default function StudentProfile() {
     const { error } = await supabase.auth.resetPasswordForEmail(profile.email, {
       redirectTo: `${window.location.origin}/reset-password`,
     });
-    if (error) { toast('تعذّر إرسال الرابط', 'error'); return; }
+    if (error) { toast('تعذّر إرسال الرابط', 'error', error); return; }
     toast(`تم إرسال رابط تغيير كلمة المرور إلى ${profile.email}`);
   };
 
@@ -149,7 +149,7 @@ export default function StudentProfile() {
       body: { user_id: id },
       headers: { Authorization: `Bearer ${sessionData.session.access_token}` },
     });
-    if (error) { toast('تعذّر الحذف — تأكد إن الـ Edge Function متنشورة (راجع README)', 'error'); return; }
+    if (error) { toast('تعذّر الحذف — تأكد إن الـ Edge Function متنشورة (راجع README)', 'error', error); return; }
     audit('delete_account', `حذف نهائي لحساب ${profile.name || profile.email || id}`);
     toast('تم حذف الحساب نهائيًا');
     navigate('/accounts');
@@ -160,7 +160,7 @@ export default function StudentProfile() {
     setSavingAiEnabled(true);
     const { error } = await supabase.from('ai_access').upsert({ user_id: id, enabled: nextEnabled }, { onConflict: 'user_id' });
     setSavingAiEnabled(false);
-    if (error) { toast('تعذّر تحديث حالة المساعد الذكي', 'error'); return; }
+    if (error) { toast('تعذّر تحديث حالة المساعد الذكي', 'error', error); return; }
     setAi((prev) => ({ ...prev, enabled: nextEnabled }));
     audit(nextEnabled ? 'ai_enable' : 'ai_disable', `${nextEnabled ? 'تفعيل' : 'إيقاف'} المساعد الذكي لـ ${profile.name || id}`);
     toast(nextEnabled ? 'تم تفعيل المساعد الذكي لهذا الطالب' : 'تم إيقاف المساعد الذكي لهذا الطالب');
@@ -181,7 +181,7 @@ export default function StudentProfile() {
     setSavingAiLimit(true);
     const { error } = await supabase.from('ai_access').upsert({ user_id: id, daily_limit_override: value }, { onConflict: 'user_id' });
     setSavingAiLimit(false);
-    if (error) { toast('تعذّر حفظ الحد المخصص', 'error'); return; }
+    if (error) { toast('تعذّر حفظ الحد المخصص', 'error', error); return; }
     setAi((prev) => ({ ...prev, daily_limit_override: value ?? '' }));
     audit('ai_limit_override', `تعديل الحد اليومي المخصص لـ ${profile.name || id} إلى ${value ?? 'الحد العام الافتراضي'}`);
     toast('تم حفظ الحد اليومي المخصص');
@@ -219,7 +219,8 @@ export default function StudentProfile() {
             {profile.role === 'moderator' && <Stamp tone="ink">مشرف</Stamp>}
             {profile.banned && <Stamp tone="coral">محظور</Stamp>}
           </p>
-          <p className="text-sm text-muted truncate">{profile.email || '—'}</p>
+          <p className="text-sm text-muted truncate"><CopyText value={profile.email}>{profile.email || '—'}</CopyText></p>
+          <p className="text-[11px] text-muted/70 mt-0.5" dir="ltr">ID: <CopyText value={profile.id} /></p>
           <p className="text-xs text-muted/70 mt-0.5">
             سجّل في {new Date(profile.created_at).toLocaleDateString('ar-EG', { day: 'numeric', month: 'short', year: 'numeric' })}
           </p>

@@ -24,7 +24,7 @@ export default function Profile() {
     const { error } = await supabase.auth.updateUser({ password });
     setSaving(false);
     if (error) {
-      toast('تعذّر تغيير كلمة المرور', 'error');
+      toast('تعذّر تغيير كلمة المرور', 'error', error);
       return;
     }
     setPassword('');

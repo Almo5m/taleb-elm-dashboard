@@ -23,7 +23,8 @@ export default function Achievements() {
 
   const load = async () => {
     setLoading(true);
-    const { data } = await supabase.from('achievements_catalog').select('*').order('threshold');
+    const { data, error } = await supabase.from('achievements_catalog').select('*').order('threshold');
+    if (error) toast('تعذّر تحميل الإنجازات', 'error', error);
     setItems(data || []);
     setLoading(false);
   };
@@ -36,7 +37,7 @@ export default function Achievements() {
       metric: form.metric,
       threshold: Number(form.threshold),
     });
-    if (error) { toast('تعذّر إضافة الإنجاز', 'error'); return; }
+    if (error) { toast('تعذّر إضافة الإنجاز', 'error', error); return; }
     setForm({ title: '', description: '', metric: 'study_hours', threshold: '' });
     toast('تمت إضافة الإنجاز');
     load();
@@ -45,7 +46,8 @@ export default function Achievements() {
   const remove = async (id) => {
     const ok = await confirm('هتحذف الإنجاز ده من الكتالوج، متأكد؟', { danger: true, confirmLabel: 'حذف' });
     if (!ok) return;
-    await supabase.from('achievements_catalog').delete().eq('id', id);
+    const { error } = await supabase.from('achievements_catalog').delete().eq('id', id);
+    if (error) { toast('تعذّر حذف الإنجاز', 'error', error); return; }
     setItems((prev) => prev.filter((i) => i.id !== id));
     toast('تم حذف الإنجاز');
   };

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../supabaseClient';
-import { PageHeader, Spinner, Stamp, EmptyState } from '../components/UI';
+import { PageHeader, Spinner, Stamp, EmptyState, CopyText, useToast } from '../components/UI';
 import { exportToCsv } from '../lib/csv';
 
 const ACTION_TONE = {
@@ -40,6 +40,7 @@ const ACTION_LABEL = {
 };
 
 export default function AuditLog() {
+  const toast = useToast();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -54,11 +55,12 @@ export default function AuditLog() {
 
   const load = async () => {
     setLoading(true);
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('admin_audit_log')
       .select('*')
       .order('created_at', { ascending: false })
       .limit(500);
+    if (error) toast('تعذّر تحميل سجل النشاط', 'error', error);
     setRows(data || []);
     setLoading(false);
   };
@@ -151,10 +153,15 @@ export default function AuditLog() {
             <div key={r.id} className="p-4 flex items-start gap-3">
               <Stamp tone={ACTION_TONE[r.action] || 'ink'}>{ACTION_LABEL[r.action] || r.action}</Stamp>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold">{r.details || r.target_type}</p>
+                <p className="text-sm font-semibold select-text">{r.details || r.target_type}</p>
                 <p className="text-xs text-muted mt-0.5">
                   {r.admin_name || 'أدمن'} · {new Date(r.created_at).toLocaleString('ar-EG')}
                 </p>
+                {r.target_id && (
+                  <p className="text-[11px] text-muted/70 mt-0.5" dir="ltr">
+                    {r.target_type}: <CopyText value={r.target_id} />
+                  </p>
+                )}
               </div>
             </div>
           ))}

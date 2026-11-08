@@ -13,7 +13,8 @@ export default function ReligiousContent() {
 
   const load = async () => {
     setLoading(true);
-    const { data } = await supabase.from('religious_collections').select('*').order('kind').order('sort_order');
+    const { data, error } = await supabase.from('religious_collections').select('*').order('kind').order('sort_order');
+    if (error) toast('تعذّر تحميل المحتوى', 'error', error);
     setItems(data || []);
     setLoading(false);
   };
@@ -22,7 +23,7 @@ export default function ReligiousContent() {
   // — بتتعدّل واحدة واحدة من حقول عادية (نص، رقم تكرار، ملاحظة)، مفيش أي JSON
   const saveItems = async (id, itemsArray) => {
     const { error } = await supabase.from('religious_collections').update({ items: itemsArray }).eq('id', id);
-    if (error) { toast('تعذّر الحفظ', 'error'); return; }
+    if (error) { toast('تعذّر الحفظ', 'error', error); return; }
     toast('تم الحفظ');
     setEditingId(null);
     load();
@@ -31,7 +32,8 @@ export default function ReligiousContent() {
   const remove = async (id) => {
     const ok = await confirm('هتحذف الفئة/القايمة دي، متأكد؟', { danger: true, confirmLabel: 'حذف' });
     if (!ok) return;
-    await supabase.from('religious_collections').delete().eq('id', id);
+    const { error } = await supabase.from('religious_collections').delete().eq('id', id);
+    if (error) { toast('تعذّر الحذف', 'error', error); return; }
     setItems((prev) => prev.filter((i) => i.id !== id));
     toast('تم الحذف');
   };

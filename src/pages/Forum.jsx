@@ -26,7 +26,8 @@ export default function Forum() {
 
   const loadThreads = async () => {
     setLoading(true);
-    const { data } = await supabase.from('forum_threads').select('*').order('created_at', { ascending: false });
+    const { data, error } = await supabase.from('forum_threads').select('*').order('created_at', { ascending: false });
+    if (error) toast('تعذّر تحميل الأسئلة', 'error', error);
     setThreads(data || []);
     setLoading(false);
   };
@@ -41,7 +42,8 @@ export default function Forum() {
     }
     setExpandedId(id);
     if (!replies[id]) {
-      const { data } = await supabase.from('forum_replies').select('*').eq('thread_id', id).order('created_at');
+      const { data, error } = await supabase.from('forum_replies').select('*').eq('thread_id', id).order('created_at');
+      if (error) toast('تعذّر تحميل الردود', 'error', error);
       setReplies((prev) => ({ ...prev, [id]: data || [] }));
     }
   };
@@ -49,7 +51,8 @@ export default function Forum() {
   const deleteThread = async (t) => {
     const ok = await confirm('هتحذف السؤال ده وكل الردود عليه، متأكد؟', { danger: true, confirmLabel: 'حذف السؤال' });
     if (!ok) return;
-    await supabase.from('forum_threads').delete().eq('id', t.id);
+    const { error } = await supabase.from('forum_threads').delete().eq('id', t.id);
+    if (error) { toast('تعذّر حذف السؤال', 'error', error); return; }
     setThreads((prev) => prev.filter((x) => x.id !== t.id));
     audit('delete_thread', t.id, `حذف سؤال: ${t.title}`);
     toast('تم حذف السؤال');
@@ -58,7 +61,8 @@ export default function Forum() {
   const deleteReply = async (threadId, replyId) => {
     const ok = await confirm('هتحذف الرد ده، متأكد؟', { danger: true, confirmLabel: 'حذف الرد' });
     if (!ok) return;
-    await supabase.from('forum_replies').delete().eq('id', replyId);
+    const { error } = await supabase.from('forum_replies').delete().eq('id', replyId);
+    if (error) { toast('تعذّر حذف الرد', 'error', error); return; }
     setReplies((prev) => ({ ...prev, [threadId]: prev[threadId].filter((r) => r.id !== replyId) }));
     setThreads((prev) => prev.map((t) => (t.id === threadId ? { ...t, replies_count: Math.max(0, t.replies_count - 1) } : t)));
     logAction({ adminId: me?.id, adminName: me?.name || 'مشرف', action: 'delete_reply', targetType: 'reply', targetId: replyId, details: 'حذف رد من سؤال' });
@@ -75,7 +79,7 @@ export default function Forum() {
       .select()
       .single();
     setSendingReply((prev) => ({ ...prev, [threadId]: false }));
-    if (error) { toast('تعذّر إرسال الرد', 'error'); return; }
+    if (error) { toast('تعذّر إرسال الرد', 'error', error); return; }
     setReplies((prev) => ({ ...prev, [threadId]: [...(prev[threadId] || []), data] }));
     setThreads((prev) => prev.map((t) => (t.id === threadId ? { ...t, replies_count: t.replies_count + 1 } : t)));
     setReplyDrafts((prev) => ({ ...prev, [threadId]: '' }));
@@ -106,7 +110,8 @@ export default function Forum() {
     if (ids.length === 0) return;
     const ok = await confirm(`هتحذف ${ids.length} سؤال وكل الردود عليهم، متأكد؟`, { danger: true, confirmLabel: `حذف ${ids.length} سؤال` });
     if (!ok) return;
-    await supabase.from('forum_threads').delete().in('id', ids);
+    const { error } = await supabase.from('forum_threads').delete().in('id', ids);
+    if (error) { toast('تعذّر الحذف الجماعي', 'error', error); return; }
     setThreads((prev) => prev.filter((t) => !ids.includes(t.id)));
     audit('bulk_delete_threads', null, `حذف جماعي لـ ${ids.length} سؤال`);
     toast(`تم حذف ${ids.length} سؤال`);

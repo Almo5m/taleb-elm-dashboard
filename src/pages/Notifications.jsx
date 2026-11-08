@@ -47,11 +47,12 @@ export default function Notifications() {
       return;
     }
     const t = setTimeout(async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('profiles')
         .select('id, name, email')
         .or(`name.ilike.%${userQuery}%,email.ilike.%${userQuery}%`)
         .limit(8);
+      if (error) toast('تعذّر البحث عن الطلاب', 'error', error);
       setUserResults(data || []);
     }, 250);
     return () => clearTimeout(t);
@@ -91,7 +92,7 @@ export default function Notifications() {
     setSendingBroadcast(false);
 
     if (result?.error) {
-      toast(result.error, 'error');
+      toast(result.error, 'error', result);
     } else {
       toast(`اتبعت لـ ${result.sent} من ${result.total} جهاز${result.failed ? ` (فشل ${result.failed})` : ''}`, 'success');
       setBroadcastTitle('');
@@ -119,7 +120,7 @@ export default function Notifications() {
     setSendingSingle(false);
 
     if (result?.error) {
-      toast(result.error, 'error');
+      toast(result.error, 'error', result);
     } else {
       toast(`اتبعت لـ ${result.sent} من ${result.total} جهاز${result.failed ? ` (فشل ${result.failed})` : ''}`, 'success');
       setSingleTitle('');

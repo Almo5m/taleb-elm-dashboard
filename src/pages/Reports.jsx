@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
-import { PageHeader, Spinner, Stamp, EmptyState, useToast, useConfirm } from '../components/UI';
+import { PageHeader, Spinner, Stamp, EmptyState, CopyButton, useToast, useConfirm } from '../components/UI';
 import { useAppUser } from '../context/AppUser';
 import { logAction } from '../lib/audit';
 import { exportToCsv } from '../lib/csv';
@@ -19,23 +19,26 @@ export default function Reports() {
 
   const load = async () => {
     setLoading(true);
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('forum_reports')
       .select('*, forum_threads(title, body, author_id, author_name), forum_replies(body, author_id, author_name)')
       .eq('status', tab)
       .order('created_at', { ascending: false });
+    if (error) toast('تعذّر تحميل البلاغات', 'error', error);
     setReports(data || []);
     setLoading(false);
   };
 
   const markReviewed = async (id) => {
-    await supabase.from('forum_reports').update({ status: 'reviewed' }).eq('id', id);
+    const { error } = await supabase.from('forum_reports').update({ status: 'reviewed' }).eq('id', id);
+    if (error) { toast('تعذّر تحويل البلاغ للمراجَعة', 'error', error); return; }
     setReports((prev) => prev.filter((r) => r.id !== id));
     toast('تم تحويل البلاغ إلى المراجَعة');
   };
 
   const restoreToPending = async (id) => {
-    await supabase.from('forum_reports').update({ status: 'pending' }).eq('id', id);
+    const { error } = await supabase.from('forum_reports').update({ status: 'pending' }).eq('id', id);
+    if (error) { toast('تعذّر إرجاع البلاغ للمعلّقة', 'error', error); return; }
     setReports((prev) => prev.filter((r) => r.id !== id));
     toast('تم إرجاع البلاغ للمعلّقة');
   };
@@ -43,7 +46,8 @@ export default function Reports() {
   const deleteReport = async (id) => {
     const ok = await confirm('هيتحذف البلاغ نهائيًا من السجل، متأكد؟', { danger: true, confirmLabel: 'حذف نهائي' });
     if (!ok) return;
-    await supabase.from('forum_reports').delete().eq('id', id);
+    const { error } = await supabase.from('forum_reports').delete().eq('id', id);
+    if (error) { toast('تعذّر حذف البلاغ', 'error', error); return; }
     setReports((prev) => prev.filter((r) => r.id !== id));
     toast('تم حذف البلاغ');
   };
@@ -54,7 +58,7 @@ export default function Reports() {
     const ok = await confirm(`هل تريد حظر "${author.author_name || 'الحساب'}"؟ لن يقدر يدخل التطبيق بعدها.`, { danger: true, confirmLabel: 'حظر الحساب' });
     if (!ok) return;
     const { error } = await supabase.from('profiles').update({ banned: true }).eq('id', author.author_id);
-    if (error) { toast('تعذّر حظر الحساب', 'error'); return; }
+    if (error) { toast('تعذّر حظر الحساب', 'error', error); return; }
     logAction({ adminId: me?.id, adminName: me?.name || 'مشرف', action: 'ban', targetType: 'profile', targetId: author.author_id, details: `حظر ${author.author_name || author.author_id} من صفحة البلاغات` });
     toast('تم حظر الحساب');
   };
@@ -62,12 +66,14 @@ export default function Reports() {
   const deleteReportedContent = async (report) => {
     const ok = await confirm('هيتحذف المحتوى المبلّغ عنه نهائيًا، متأكد؟', { danger: true, confirmLabel: 'حذف المحتوى' });
     if (!ok) return;
-    if (report.thread_id) {
-      await supabase.from('forum_threads').delete().eq('id', report.thread_id);
-    } else if (report.reply_id) {
-      await supabase.from('forum_replies').delete().eq('id', report.reply_id);
+    if (report.thread_id || report.reply_id) {
+      const table = report.thread_id ? 'forum_threads' : 'forum_replies';
+      const contentId = report.thread_id || report.reply_id;
+      const { error: delError } = await supabase.from(table).delete().eq('id', contentId);
+      if (delError) { toast('تعذّر حذف المحتوى المبلّغ عنه', 'error', delError); return; }
     }
-    await supabase.from('forum_reports').update({ status: 'reviewed' }).eq('id', report.id);
+    const { error: markError } = await supabase.from('forum_reports').update({ status: 'reviewed' }).eq('id', report.id);
+    if (markError) { toast('اتحذف المحتوى لكن تعذّر تحويل البلاغ للمراجَعة', 'error', markError); return; }
     setReports((prev) => prev.filter((r) => r.id !== report.id));
     logAction({ adminId: me?.id, adminName: me?.name || 'مشرف', action: 'delete_report_content', targetType: 'report', targetId: report.id, details: `حذف محتوى بلاغ: ${report.reason}` });
     toast('تم حذف المحتوى وتحويل البلاغ للمراجَعة');
@@ -151,6 +157,7 @@ export default function Reports() {
                     <button onClick={() => deleteReportedContent(r)} className="btn-danger !px-4 !py-2 text-xs">حذف المحتوى المبلّغ عنه</button>
                     <button onClick={() => banAuthor(r)} className="btn-danger !px-4 !py-2 text-xs">حظر الكاتب</button>
                     <button onClick={() => markReviewed(r.id)} className="btn-ghost !px-4 !py-2 text-xs">تمت المراجعة بدون حذف</button>
+                    <CopyButton text={() => (r.thread_id ? `${r.forum_threads?.title || ''}\n${r.forum_threads?.body || ''}` : r.forum_replies?.body || '').trim()} label="نسخ المحتوى" className="btn-ghost !px-4 !py-2 text-xs" />
                   </>
                 ) : (
                   <>

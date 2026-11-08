@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Routes, Route, NavLink, useNavigate, Navigate } from 'react-router-dom';
+import { Routes, Route, NavLink, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { supabase } from './supabaseClient';
-import { ToastProvider, ConfirmProvider } from './components/UI';
+import { ToastProvider, ConfirmProvider, ErrorBoundary } from './components/UI';
 import { AppUserProvider, useAppUser } from './context/AppUser';
 import Login from './pages/Login';
 import Overview from './pages/Overview';
@@ -127,6 +127,7 @@ function AdminOnly({ children }) {
 }
 
 function Layout({ onLogout }) {
+  const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [pendingReports, setPendingReports] = useState(0);
 
@@ -167,6 +168,7 @@ function Layout({ onLogout }) {
         </header>
 
         <main className="p-5 md:p-10 max-w-6xl mx-auto">
+          <ErrorBoundary key={location.pathname}>
           <Routes>
             <Route path="/" element={<Overview />} />
             <Route path="/accounts" element={<AdminOnly><Accounts /></AdminOnly>} />
@@ -187,6 +189,7 @@ function Layout({ onLogout }) {
             <Route path="/audit-log" element={<AdminOnly><AuditLog /></AdminOnly>} />
             <Route path="/profile" element={<Profile />} />
           </Routes>
+          </ErrorBoundary>
         </main>
       </div>
     </div>

@@ -73,7 +73,8 @@ function BannedWordsContent() {
 
   const load = async () => {
     setLoading(true);
-    const { data } = await supabase.from('banned_words').select('*').order('created_at', { ascending: false });
+    const { data, error } = await supabase.from('banned_words').select('*').order('created_at', { ascending: false });
+    if (error) toast('تعذّر تحميل الكلمات الممنوعة', 'error', error);
     setWords(data || []);
     setLoading(false);
   };
@@ -82,7 +83,7 @@ function BannedWordsContent() {
     const w = newWord.trim();
     if (!w) return;
     const { error } = await supabase.from('banned_words').insert({ word: w });
-    if (error) { toast('الكلمة دي مضافة بالفعل أو حصل خطأ', 'error'); return; }
+    if (error) { toast('الكلمة دي مضافة بالفعل أو حصل خطأ', 'error', error); return; }
     setNewWord('');
     toast('تمت الإضافة للفلتر');
     load();
@@ -91,7 +92,8 @@ function BannedWordsContent() {
   const remove = async (id) => {
     const ok = await confirm('هتشيل الكلمة دي من الفلتر، متأكد؟', { danger: true, confirmLabel: 'حذف' });
     if (!ok) return;
-    await supabase.from('banned_words').delete().eq('id', id);
+    const { error } = await supabase.from('banned_words').delete().eq('id', id);
+    if (error) { toast('تعذّر حذف الكلمة', 'error', error); return; }
     setWords((prev) => prev.filter((w) => w.id !== id));
     setRevealedIds((prev) => {
       const next = new Set(prev);

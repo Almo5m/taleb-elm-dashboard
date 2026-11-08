@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../supabaseClient';
-import { PageHeader, Spinner, Stamp, EmptyState, useToast, useConfirm } from '../components/UI';
+import { PageHeader, Spinner, Stamp, EmptyState, CopyButton, CopyText, useToast, useConfirm } from '../components/UI';
 
 // آخر 1000 تقرير بس (حد PostgREST الافتراضي) — كفاية لتشخيص أي عطل جديد،
 // والأقدم من 30 يوم بيتمسح تلقائيًا أو يدويًا بالزرار فوق.
@@ -15,13 +15,44 @@ function formatDate(value) {
 // ⚠️ كل محتوى الجدول ده جاي من أجهزة مجهولة (anon) يعني غير موثوق — بنعرضه
 // دايمًا كنص عادي جوه React (مفيش dangerouslySetInnerHTML خالص) عشان أي HTML
 // أو سكريبت جوه message/stack يتعرض كنص ومايتنفّذش.
+// نص كامل للتقرير (بكل التفاصيل) جاهز للنسخ واللصق
+function reportText(e) {
+  return [
+    `الرسالة: ${e.message || '(بدون رسالة)'}`,
+    `الوقت: ${new Date(e.created_at).toISOString()}`,
+    `الإصدار: ${e.app_version || '—'}`,
+    `المنصة: ${e.platform || '—'}`,
+    `السياق: ${e.context || '—'}`,
+    `الجهاز: ${e.device_id || '—'}`,
+    '',
+    'Stack:',
+    e.stack || 'مفيش stack مسجّل',
+  ].join('\n');
+}
+
+function groupText(g) {
+  return [
+    `عدد المرات: ${g.count} · عدد الأجهزة: ${g.devices.size}`,
+    g.versions.size > 0 ? `الإصدارات: ${[...g.versions].join('، ')}` : null,
+    '',
+    reportText(g.latest),
+  ].filter((x) => x !== null).join('\n');
+}
+
 function StackBox({ error }) {
   return (
-    <div className="bg-parchment/60 rounded-lg p-3 mt-2">
-      <p className="text-[11px] text-muted mb-2">
-        {error.platform || '—'} · {error.context || '—'} · جهاز: <span dir="ltr">{error.device_id?.slice(0, 8)}…</span>
+    <div className="bg-parchment/60 rounded-lg p-3 mt-2 select-text">
+      <div className="flex items-start justify-between gap-3 mb-2">
+        <p className="text-sm font-semibold break-words flex-1 min-w-0" dir="auto">
+          {error.message || '(بدون رسالة)'}
+        </p>
+        <CopyButton text={() => reportText(error)} label="نسخ التقرير كامل" className="btn-primary !px-3 !py-1 text-xs shrink-0" />
+      </div>
+      <p className="text-[11px] text-muted mb-2 break-all">
+        {formatDate(error.created_at)} · {error.app_version || '—'} · {error.platform || '—'} · {error.context || '—'} · جهاز:{' '}
+        <CopyText value={error.device_id} className="text-[11px]"><span dir="ltr">{error.device_id}</span></CopyText>
       </p>
-      <pre dir="ltr" className="text-[11px] whitespace-pre-wrap break-all text-left max-h-64 overflow-y-auto">
+      <pre dir="ltr" className="text-[11px] whitespace-pre-wrap break-all text-left max-h-64 overflow-y-auto select-text">
         {error.stack || 'مفيش stack مسجّل'}
       </pre>
     </div>
@@ -90,7 +121,7 @@ export default function ClientErrors() {
     if (!ok) return;
     const { error } = await supabase.from('client_errors').delete().eq('id', id);
     if (error) {
-      toast('تعذّر الحذف', 'error');
+      toast('تعذّر الحذف', 'error', error);
       return;
     }
     setRows((prev) => prev.filter((r) => r.id !== id));
@@ -109,11 +140,22 @@ export default function ClientErrors() {
       .delete({ count: 'exact' })
       .lt('created_at', cutoff);
     if (error) {
-      toast('تعذّر الحذف', 'error');
+      toast('تعذّر الحذف', 'error', error);
       return;
     }
     toast(`اتمسح ${count ?? 0} تقرير`);
     load();
+  };
+
+  // ملخص لأهم 15 نوع عطل (حسب عدد الأجهزة) جاهز يتبعت لمحادثة التطبيق
+  const summaryText = () => {
+    const head = [
+      `أعطال التطبيق — ${filtered.length} تقرير في ${groups.length} نوع`,
+      version !== 'الكل' ? `الإصدار: ${version}` : null,
+      `تاريخ التقرير: ${new Date().toISOString()}`,
+    ].filter(Boolean).join('\n');
+    const body = groups.slice(0, 15).map((g, i) => `#${i + 1}\n${groupText(g)}`).join('\n\n----------------------------------------\n\n');
+    return `${head}\n\n${body}`;
   };
 
   return (
@@ -121,7 +163,12 @@ export default function ClientErrors() {
       <PageHeader
         eyebrow="تحليلات"
         title="أعطال التطبيق"
-        action={<button onClick={removeOld} className="btn-ghost">مسح الأقدم من 30 يوم</button>}
+        action={
+          <div className="flex gap-2 flex-wrap">
+            <CopyButton text={summaryText} label="نسخ ملخص الأعطال" className="btn-ghost" />
+            <button onClick={removeOld} className="btn-ghost">مسح الأقدم من 30 يوم</button>
+          </div>
+        }
       />
       <p className="text-xs text-muted mb-6 -mt-4">
         تقارير مجهولة من التطبيق (من غير اسم ولا إيميل) — آخر {FETCH_LIMIT} تقرير
@@ -162,7 +209,8 @@ export default function ClientErrors() {
         <div className="card divide-y divide-parchment-line overflow-hidden">
           {groups.map((g) => (
             <div key={g.key} className="p-4">
-              <button onClick={() => setOpenKey(openKey === g.key ? null : g.key)} className="w-full text-right">
+              <div className="flex items-start gap-2">
+              <button onClick={() => setOpenKey(openKey === g.key ? null : g.key)} className="flex-1 min-w-0 text-right">
                 <div className="flex items-start gap-4">
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-sm break-words" dir="auto">{g.key}</p>
@@ -177,6 +225,8 @@ export default function ClientErrors() {
                   </div>
                 </div>
               </button>
+              <CopyButton text={() => groupText(g)} label="نسخ" className="btn-ghost !px-2.5 !py-1 text-xs shrink-0" />
+              </div>
               {openKey === g.key && <StackBox error={g.latest} />}
             </div>
           ))}
@@ -191,7 +241,7 @@ export default function ClientErrors() {
                   className="flex-1 min-w-0 text-right"
                 >
                   <p className="font-semibold text-sm break-words" dir="auto">
-                    {(r.message || '(بدون رسالة)').slice(0, 200)}
+                    {(r.message || '(بدون رسالة)').length > 200 ? `${r.message.slice(0, 200)}…` : (r.message || '(بدون رسالة)')}
                   </p>
                   <p className="text-[11px] text-muted mt-1">
                     {formatDate(r.created_at)} · {r.app_version || '—'}

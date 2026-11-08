@@ -22,7 +22,8 @@ export default function Announcement() {
 
   const load = async () => {
     setLoading(true);
-    const { data } = await supabase.from('announcements').select('*').eq('active', true).order('created_at', { ascending: false });
+    const { data, error } = await supabase.from('announcements').select('*').eq('active', true).order('created_at', { ascending: false });
+    if (error) toast('تعذّر تحميل الرسائل', 'error', error);
     setAnnouncements(data || []);
     setLoading(false);
   };
@@ -41,7 +42,7 @@ export default function Announcement() {
       ends_at: form.ends_at ? new Date(form.ends_at).toISOString() : null,
     });
     setSaving(false);
-    if (error) { toast('تعذّر نشر الرسالة', 'error'); return; }
+    if (error) { toast('تعذّر نشر الرسالة', 'error', error); return; }
     logAction({ adminId: me?.id, adminName: me?.name || 'أدمن', action: 'publish_announcement', targetType: 'announcement', details: form.message.trim().slice(0, 60) });
     setForm({ message: '', target_system: '', target_grade: '', starts_at: '', ends_at: '' });
     toast(isFuture ? 'تم جدولة الرسالة' : 'تم نشر الرسالة');
@@ -51,7 +52,8 @@ export default function Announcement() {
   const remove = async (id, message) => {
     const ok = await confirm('هتشيل الرسالة دي من الظهور، متأكد؟', { danger: true, confirmLabel: 'إخفاء الرسالة' });
     if (!ok) return;
-    await supabase.from('announcements').update({ active: false }).eq('id', id);
+    const { error } = await supabase.from('announcements').update({ active: false }).eq('id', id);
+    if (error) { toast('تعذّر إخفاء الرسالة', 'error', error); return; }
     setAnnouncements((prev) => prev.filter((a) => a.id !== id));
     logAction({ adminId: me?.id, adminName: me?.name || 'أدمن', action: 'hide_announcement', targetType: 'announcement', targetId: id, details: (message || '').slice(0, 60) });
     toast('تم إخفاء الرسالة');
