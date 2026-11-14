@@ -17,6 +17,10 @@ const ACTION_TONE = {
   bulk_ban: 'coral',
   bulk_delete_threads: 'coral',
   ai_enable: 'forest',
+  client_error_status: 'gold',
+  client_error_delete: 'coral',
+  bulk_ai_enable: 'forest',
+  bulk_ai_disable: 'coral',
   ai_disable: 'coral',
   ai_limit_override: 'gold',
 };
@@ -35,6 +39,10 @@ const ACTION_LABEL = {
   bulk_ban: 'حظر جماعي',
   bulk_delete_threads: 'حذف جماعي لأسئلة',
   ai_enable: 'تفعيل المساعد الذكي',
+  client_error_status: 'تغيير حالة عطل',
+  client_error_delete: 'حذف تقارير عطل',
+  bulk_ai_enable: 'تفعيل جماعي للمساعد الذكي',
+  bulk_ai_disable: 'إيقاف جماعي للمساعد الذكي',
   ai_disable: 'إيقاف المساعد الذكي',
   ai_limit_override: 'تعديل حد المساعد الذكي',
 };

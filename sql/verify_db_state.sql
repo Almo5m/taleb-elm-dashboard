@@ -18,7 +18,7 @@ from (
          from unnest(array['ai_chat_logs_cleanup','classify_ai_questions_daily','forum_reports_cleanup',
                            'weekly_report','client_errors_alert','client_errors_cleanup','user_stats_flags_cleanup']) as j
   union all select 'table: ' || t, to_regclass('public.' || t) is not null
-         from unnest(array['ai_chat_logs','ai_rate_limit','client_errors','device_tokens','push_notifications_log','user_stats_flags','user_stats_guard_config']) as t
+         from unnest(array['ai_chat_logs','ai_rate_limit','client_errors','device_tokens','push_notifications_log','user_stats_flags','user_stats_guard_config','ai_usage_alerts','client_error_status','client_error_alerts']) as t
   union all select 'ai_rate_limit.' || c || ' (rate_limit_upgrade)',
          exists(select 1 from information_schema.columns
                 where table_schema = 'public' and table_name = 'ai_rate_limit' and column_name = c)
@@ -31,6 +31,19 @@ from (
          not has_table_privilege('anon', 'public.user_stats', 'SELECT')
   union all select 'trigger: user_stats_guard_trigger (user_stats_guard)',
          exists(select 1 from pg_trigger where tgname = 'user_stats_guard_trigger')
+  union all select 'RLS شغّال: ai_rate_limit (security_hardening)',
+         coalesce((select relrowsecurity from pg_class where oid = to_regclass('public.ai_rate_limit')), false)
+  union all select 'RLS شغّال: ai_error_alert_state (security_hardening)',
+         coalesce((select relrowsecurity from pg_class where oid = to_regclass('public.ai_error_alert_state')), false)
+  union all select 'notify_telegram مقفولة قدام الـ API (security_hardening)',
+         not has_function_privilege('anon', 'public.notify_telegram(text,text,jsonb)', 'execute')
+         and not has_function_privilege('authenticated', 'public.notify_telegram(text,text,jsonb)', 'execute')
+  union all select 'function: ai_record_usage (ai_usage_alerts)',
+         to_regprocedure('public.ai_record_usage(uuid,date,text)') is not null
+  union all select 'view: ' || v || ' (client_errors_v2)', to_regclass('public.' || v) is not null
+         from unnest(array['client_error_groups','client_error_daily']) as v
+  union all select 'trigger: trg_auto_enable_ai_new_profile (ai_auto_enable، اختياري)',
+         exists(select 1 from pg_trigger where tgname = 'trg_auto_enable_ai_new_profile')
   union all select 'user_stats: authenticated مالوش TRUNCATE',
          not has_table_privilege('authenticated', 'public.user_stats', 'TRUNCATE')
   union all select 'مفيش placeholder متسيّب في الـ cron',

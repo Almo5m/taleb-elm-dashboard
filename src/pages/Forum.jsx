@@ -3,6 +3,7 @@ import { supabase } from '../supabaseClient';
 import { PageHeader, Spinner, Stamp, EmptyState, useToast, useConfirm } from '../components/UI';
 import { useAppUser } from '../context/AppUser';
 import { logAction } from '../lib/audit';
+import { fetchAll, inChunks } from '../lib/fetchAll';
 
 export default function Forum() {
   const [threads, setThreads] = useState([]);
@@ -26,8 +27,9 @@ export default function Forum() {
 
   const loadThreads = async () => {
     setLoading(true);
-    const { data, error } = await supabase.from('forum_threads').select('*').order('created_at', { ascending: false });
-    if (error) toast('تعذّر تحميل الأسئلة', 'error', error);
+    // fetchAll: Supabase بيقطع الاستعلام عند 1000 صف، والبحث هنا بيتم على كل الأسئلة
+    const { data, error } = await fetchAll(() => supabase.from('forum_threads').select('*').order('created_at', { ascending: false }).order('id'));
+    if (error) toast('تعذّر تحميل كل الأسئلة — اللي ظاهر ممكن يكون ناقص', 'error', error);
     setThreads(data || []);
     setLoading(false);
   };
@@ -110,8 +112,12 @@ export default function Forum() {
     if (ids.length === 0) return;
     const ok = await confirm(`هتحذف ${ids.length} سؤال وكل الردود عليهم، متأكد؟`, { danger: true, confirmLabel: `حذف ${ids.length} سؤال` });
     if (!ok) return;
-    const { error } = await supabase.from('forum_threads').delete().in('id', ids);
-    if (error) { toast('تعذّر الحذف الجماعي', 'error', error); return; }
+    const { error, done } = await inChunks(ids, (part) => supabase.from('forum_threads').delete().in('id', part));
+    if (error) {
+      toast(`الحذف الجماعي وقف بعد ${done} من ${ids.length} سؤال — اللي قبل كده اتحذف`, 'error', error);
+      loadThreads();
+      return;
+    }
     setThreads((prev) => prev.filter((t) => !ids.includes(t.id)));
     audit('bulk_delete_threads', null, `حذف جماعي لـ ${ids.length} سؤال`);
     toast(`تم حذف ${ids.length} سؤال`);

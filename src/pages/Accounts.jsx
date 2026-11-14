@@ -5,6 +5,7 @@ import { PageHeader, Spinner, Stamp, EmptyState, useToast, useConfirm } from '..
 import { useAppUser } from '../context/AppUser';
 import { logAction } from '../lib/audit';
 import { exportToCsv } from '../lib/csv';
+import { fetchAll, inChunks } from '../lib/fetchAll';
 
 const GRADES = ['الصف الأول الثانوي', 'الصف الثاني الثانوي', 'الصف الثالث الثانوي'];
 
@@ -16,6 +17,8 @@ export default function Accounts() {
   const [statusFilter, setStatusFilter] = useState('الكل');
   const [aiFilter, setAiFilter] = useState('الكل');
   const [aiAccess, setAiAccess] = useState({});
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [joinedFilter, setJoinedFilter] = useState('الكل');
   const [selected, setSelected] = useState(new Set());
   const toast = useToast();
   const confirm = useConfirm();
@@ -27,13 +30,15 @@ export default function Accounts() {
 
   const load = async () => {
     setLoading(true);
+    // fetchAll: Supabase بيقطع أي استعلام عند 1000 صف من غير تنبيه، وده كان هيخفي الطلاب الزيادة
     const [{ data, error }, { data: aiRows, error: aiError }] = await Promise.all([
-      supabase.from('profiles').select('*').order('created_at', { ascending: false }),
-      supabase.from('ai_access').select('*'),
+      fetchAll(() => supabase.from('profiles').select('*').order('created_at', { ascending: false }).order('id')),
+      fetchAll(() => supabase.from('ai_access').select('*').order('user_id')),
     ]);
     if (error) toast('تعذّر تحميل الحسابات', 'error', error);
+    if (aiError) toast('تعذّر تحميل حالة المساعد الذكي — الأرقام المعروضة ممكن تكون ناقصة', 'error', aiError);
     setProfiles(data || []);
-    if (!aiError && aiRows) {
+    if (aiRows) {
       const map = {};
       aiRows.forEach((r) => { map[r.user_id] = { enabled: r.enabled, daily_limit_override: r.daily_limit_override }; });
       setAiAccess(map);
@@ -63,9 +68,11 @@ export default function Accounts() {
         aiFilter === 'الكل' ||
         (aiFilter === 'مفعّل' && aiEnabled) ||
         (aiFilter === 'معطّل' && !aiEnabled);
-      return matchesSearch && matchesGrade && matchesStatus && matchesAi;
+      const joinedDays = joinedFilter === 'آخر 24 ساعة' ? 1 : joinedFilter === 'آخر 7 أيام' ? 7 : null;
+      const matchesJoined = joinedDays === null || Date.now() - new Date(p.created_at).getTime() <= joinedDays * 86400000;
+      return matchesSearch && matchesGrade && matchesStatus && matchesAi && matchesJoined;
     });
-  }, [profiles, search, gradeFilter, statusFilter, aiFilter, aiAccess]);
+  }, [profiles, search, gradeFilter, statusFilter, aiFilter, joinedFilter, aiAccess]);
 
   const toggleSelect = (id) => {
     setSelected((prev) => {
@@ -86,13 +93,58 @@ export default function Accounts() {
     if (ids.length === 0) return;
     const ok = await confirm(`هتحظر ${ids.length} حساب دفعة واحدة، متأكد؟`, { danger: true, confirmLabel: `حظر ${ids.length} حساب` });
     if (!ok) return;
-    const { error } = await supabase.from('profiles').update({ banned: true }).in('id', ids);
-    if (error) { toast('حصل خطأ أثناء الحظر الجماعي', 'error', error); return; }
+    const { error, done } = await inChunks(ids, (part) => supabase.from('profiles').update({ banned: true }).in('id', part));
+    if (error) {
+      toast(`الحظر الجماعي وقف بعد ${done} من ${ids.length} حساب — اللي قبل كده اتنفّذ`, 'error', error);
+      load();
+      return;
+    }
     setProfiles((prev) => prev.map((p) => (ids.includes(p.id) ? { ...p, banned: true } : p)));
     audit('bulk_ban', null, `حظر جماعي لـ ${ids.length} حساب`);
     toast(`تم حظر ${ids.length} حساب`);
     clearSelection();
   };
+
+  // تفعيل/إيقاف المساعد الذكي لمجموعة طلاب دفعة واحدة (بيحافظ على الحد اليومي المخصص لكل طالب)
+  const setAiForIds = async (ids, enabled) => {
+    if (ids.length === 0 || bulkBusy) return;
+    const label = enabled ? 'تفعيل' : 'إيقاف';
+    const ok = await confirm(`هتعمل ${label} للمساعد الذكي لـ ${ids.length} طالب دفعة واحدة، متأكد؟`, {
+      danger: !enabled,
+      confirmLabel: `${label} لـ ${ids.length} طالب`,
+    });
+    if (!ok) return;
+    setBulkBusy(true);
+    const now = new Date().toISOString();
+    for (let i = 0; i < ids.length; i += 500) {
+      const chunk = ids.slice(i, i + 500).map((id) => ({ user_id: id, enabled, updated_at: now }));
+      const { error } = await supabase.from('ai_access').upsert(chunk, { onConflict: 'user_id' });
+      if (error) {
+        toast(`${label} المساعد الذكي وقف عند ${i} من ${ids.length} — اللي قبل كده اتنفّذ`, 'error', error);
+        setBulkBusy(false);
+        load();
+        return;
+      }
+    }
+    setAiAccess((prev) => {
+      const next = { ...prev };
+      ids.forEach((id) => { next[id] = { daily_limit_override: null, ...(next[id] || {}), enabled }; });
+      return next;
+    });
+    audit(enabled ? 'bulk_ai_enable' : 'bulk_ai_disable', null, `${label} المساعد الذكي لـ ${ids.length} طالب`);
+    toast(`تم ${label} المساعد الذكي لـ ${ids.length} طالب`);
+    setBulkBusy(false);
+    clearSelection();
+  };
+
+  const studentsWithoutAi = useMemo(
+    () => profiles.filter((p) => p.role === 'student' && !p.banned && !getAiAccess(p.id).enabled),
+    [profiles, aiAccess]
+  );
+  const aiEnabledCount = useMemo(
+    () => profiles.filter((p) => getAiAccess(p.id).enabled).length,
+    [profiles, aiAccess]
+  );
 
   const exportCsv = () => {
     exportToCsv(
@@ -114,7 +166,7 @@ export default function Accounts() {
   return (
     <div>
       <PageHeader
-        eyebrow={`${profiles.length} حساب مسجّل`}
+        eyebrow={`${profiles.length} حساب مسجّل · المساعد الذكي مفعّل لـ ${aiEnabledCount}`}
         title="إدارة الحسابات"
         action={<button onClick={exportCsv} className="btn-ghost">تصدير CSV ⭳</button>}
       />
@@ -138,6 +190,9 @@ export default function Accounts() {
           <option value="مفعّل">المساعد الذكي: مفعّل</option>
           <option value="معطّل">المساعد الذكي: معطّل</option>
         </select>
+        <select value={joinedFilter} onChange={(e) => setJoinedFilter(e.target.value)} className="input-field md:w-44">
+          {['الكل', 'آخر 24 ساعة', 'آخر 7 أيام'].map((s) => <option key={s} value={s}>{s === 'الكل' ? 'التسجيل: الكل' : `سجّلوا ${s}`}</option>)}
+        </select>
       </div>
 
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
@@ -148,9 +203,32 @@ export default function Accounts() {
           )}
         </div>
         {selected.size > 0 && (
-          <button onClick={bulkBan} className="btn-danger !px-4 !py-2 text-sm">حظر المحدَّدين ({selected.size})</button>
+          <div className="flex gap-2 flex-wrap">
+            <button onClick={() => setAiForIds([...selected], true)} disabled={bulkBusy} className="btn-primary !px-4 !py-2 text-sm">
+              تفعيل المساعد الذكي ({selected.size})
+            </button>
+            <button onClick={() => setAiForIds([...selected], false)} disabled={bulkBusy} className="btn-ghost !px-4 !py-2 text-sm">
+              إيقاف المساعد الذكي ({selected.size})
+            </button>
+            <button onClick={bulkBan} className="btn-danger !px-4 !py-2 text-sm">حظر المحدَّدين ({selected.size})</button>
+          </div>
         )}
       </div>
+
+      {studentsWithoutAi.length > 0 && !loading && (
+        <div className="card p-3 mb-4 flex items-center justify-between gap-3 flex-wrap bg-parchment/60">
+          <p className="text-sm text-muted">
+            <span className="font-semibold text-inktext">{studentsWithoutAi.length}</span> طالب مالهمش المساعد الذكي مفعّل.
+          </p>
+          <button
+            onClick={() => setAiForIds(studentsWithoutAi.map((p) => p.id), true)}
+            disabled={bulkBusy}
+            className="btn-primary !px-4 !py-2 text-sm"
+          >
+            فعّل المساعد لكلهم
+          </button>
+        </div>
+      )}
 
       {loading ? (
         <Spinner />

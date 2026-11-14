@@ -30,6 +30,39 @@ const CONTACT_FIELDS = [
   { key: 'telegram_personal', label: 'تليجرام شخصي' },
 ];
 
+// حاسبة السعة: السقف الشهري الإجمالي ثابت، فكل ما المفعّل لهم زادوا، السقف بيخلص أسرع.
+// الحسبة لأسوأ حالة (كل طالب بيستخدم حده اليومي كله). الاستخدام الفعلي غالبًا أقل بكتير، فراقب الاستهلاك الشهري.
+function AiCapacity({ counts, daily, monthly, autoEnable }) {
+  if (counts.enabled === null || !daily || !monthly) return null;
+  const fmt = (n) => Math.round(n).toLocaleString('en-US');
+  const worstPerDay = counts.enabled * daily;
+  const days = worstPerDay > 0 ? monthly / worstPerDay : null;
+  const allStudentsPerDay = (counts.students ?? 0) * daily;
+  const daysAll = allStudentsPerDay > 0 ? monthly / allStudentsPerDay : null;
+  const tight = (d) => d !== null && d < 30;
+
+  return (
+    <div className="bg-parchment rounded-xl px-3 py-2.5 mt-3 text-sm">
+      <p className="text-xs text-muted font-semibold mb-1">حاسبة السعة (أسوأ حالة)</p>
+      <p>
+        المفعّل لهم دلوقتي <span className="font-semibold">{fmt(counts.enabled)}</span> من {fmt(counts.students ?? 0)} طالب.
+        لو كلهم استخدموا الحد اليومي ({fmt(daily)}) يبقى <span className="font-semibold">{fmt(worstPerDay)}</span> رسالة في اليوم.
+      </p>
+      {days !== null && (
+        <p className={`mt-1 ${tight(days) ? 'text-coral-dark font-semibold' : 'text-muted'}`}>
+          السقف الشهري ({fmt(monthly)}) يخلص بعد حوالي {days < 1 ? 'أقل من يوم' : `${days.toFixed(1)} يوم`} في أسوأ حالة.
+          {tight(days) && ' لو الاستخدام الفعلي قريب من الحد، ارفع السقف أو قلّل الحد اليومي.'}
+        </p>
+      )}
+      {(autoEnable || (counts.students ?? 0) > counts.enabled) && daysAll !== null && counts.students > counts.enabled && (
+        <p className={`mt-1 ${tight(daysAll) ? 'text-coral-dark' : 'text-muted'}`}>
+          لو فعّلته لكل الطلاب ({fmt(counts.students)}): السقف يخلص بعد حوالي {daysAll < 1 ? 'أقل من يوم' : `${daysAll.toFixed(1)} يوم`} في أسوأ حالة.
+        </p>
+      )}
+    </div>
+  );
+}
+
 async function readSetting(key, fallback) {
   const { data, error } = await supabase.from('app_settings').select('value').eq('key', key).maybeSingle();
   if (error) throw error; // لو القراءة فشلت مانعرضش قيم افتراضية، لأن الحفظ بعدها كان هيمسح الإعدادات الحقيقية
@@ -83,10 +116,11 @@ export default function Settings() {
   const [savingLinks, setSavingLinks] = useState(false);
 
   // المساعد الذكي
-  const AI_DEFAULTS = { enabled: false, daily_limit_per_user: 20, monthly_limit_global: 3000, model: 'gemini-2.5-flash-lite' };
+  const AI_DEFAULTS = { enabled: false, auto_enable_new: false, daily_limit_per_user: 20, monthly_limit_global: 3000, model: 'gemini-2.5-flash-lite' };
   const [aiAssistant, setAiAssistant] = useState(AI_DEFAULTS);
   const [savingAi, setSavingAi] = useState(false);
   const [aiUsage, setAiUsage] = useState({ loading: true, count: null, error: false });
+  const [aiCounts, setAiCounts] = useState({ students: null, enabled: null });
 
   // خاصية التراكمات (study_plan_settings) — بتبدأ false ومفيش أي قيمة مخفية في الكود
   const me = useAppUser();
@@ -155,6 +189,20 @@ export default function Settings() {
       } catch {
         setAiUsage({ loading: false, count: null, error: true });
       }
+    })();
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      const [students, enabled] = await Promise.all([
+        supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'student').eq('banned', false),
+        supabase.from('ai_access').select('*', { count: 'exact', head: true }).eq('enabled', true),
+      ]);
+      if (students.error || enabled.error) {
+        toast('تعذّر حساب أعداد الطلاب لحاسبة المساعد الذكي', 'error', students.error || enabled.error);
+        return;
+      }
+      setAiCounts({ students: students.count ?? 0, enabled: enabled.count ?? 0 });
     })();
   }, []);
 
@@ -359,15 +407,12 @@ export default function Settings() {
     }
 
     setSavingAi(true);
-    const { error } = await writeSetting('ai_assistant', {
-      enabled: aiAssistant.enabled,
-      daily_limit_per_user: dailyLimit,
-      monthly_limit_global: monthlyLimit,
-      model,
-    });
+    // بنحتفظ بأي حقول تانية في الإعداد (زي auto_enable_new) بدل ما نمسحها
+    const payload = { ...aiAssistant, auto_enable_new: !!aiAssistant.auto_enable_new, daily_limit_per_user: dailyLimit, monthly_limit_global: monthlyLimit, model };
+    const { error } = await writeSetting('ai_assistant', payload);
     setSavingAi(false);
     if (error) { toast('تعذّر الحفظ', 'error', error); return; }
-    setAiAssistant({ enabled: aiAssistant.enabled, daily_limit_per_user: dailyLimit, monthly_limit_global: monthlyLimit, model });
+    setAiAssistant(payload);
     toast(aiAssistant.enabled ? 'تم حفظ إعدادات المساعد الذكي — الميزة مفعّلة' : 'تم حفظ إعدادات المساعد الذكي');
   };
 
@@ -586,6 +631,22 @@ export default function Settings() {
           <span className="font-semibold text-sm">تفعيل المساعد الذكي</span>
         </label>
 
+        <label className="flex items-start gap-3 mb-4 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={!!aiAssistant.auto_enable_new}
+            onChange={(e) => setAiAssistant({ ...aiAssistant, auto_enable_new: e.target.checked })}
+            className="w-5 h-5 accent-coral mt-0.5"
+          />
+          <span>
+            <span className="font-semibold text-sm block">تفعيل المساعد تلقائيًا للطلاب الجدد</span>
+            <span className="text-xs text-muted block mt-0.5">
+              أي طالب يسجّل من دلوقتي بيتفعّل له المساعد من غير ما تدخل له. الطلاب الحاليين من صفحة الحسابات (تحديد ← تفعيل).
+              محتاج تشغّل ملف sql/supabase_ai_auto_enable.sql مرة واحدة في Supabase.
+            </span>
+          </span>
+        </label>
+
         <div className="grid grid-cols-2 gap-3 mb-3">
           <div>
             <label className="text-xs text-muted font-semibold">الحد اليومي الافتراضي لكل طالب</label>
@@ -630,6 +691,13 @@ export default function Settings() {
             </p>
           )}
         </div>
+
+        <AiCapacity
+          counts={aiCounts}
+          daily={Number(aiAssistant.daily_limit_per_user)}
+          monthly={Number(aiAssistant.monthly_limit_global)}
+          autoEnable={!!aiAssistant.auto_enable_new}
+        />
       </Section>
 
       <Section

@@ -65,7 +65,7 @@ begin
     body := jsonb_build_object('table', table_name, 'event', event_type, 'record', row_data)
   );
 end;
-$$ language plpgsql security definer;
+$$ language plpgsql security definer set search_path = public;
 
 -- دالة واحدة مشتركة بتتنادى من أي trigger، وبتاخد اسم الجدول ونوع الحدث
 -- وبيانات الصف نفسه تلقائيًا من TG_TABLE_NAME و TG_OP و NEW/OLD
@@ -79,7 +79,12 @@ begin
   );
   return coalesce(NEW, OLD);
 end;
-$$ language plpgsql security definer;
+$$ language plpgsql security definer set search_path = public;
+
+-- ⚠️ notify_telegram بتتنادى من الـ trigger بس. لازم تفضل مقفولة قدام الـ API،
+-- وإلا أي حد معاه الـ anon key ينادي عليها ويبعتلك رسايل تليجرام مزيّفة.
+revoke execute on function public.notify_telegram(text, text, jsonb) from public, anon, authenticated;
+revoke execute on function public.notify_telegram_trigger() from public, anon, authenticated;
 
 do $$
 declare

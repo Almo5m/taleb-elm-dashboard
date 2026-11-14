@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { PageHeader, Spinner, Stamp, useToast } from '../components/UI';
+import { cairoDate, DAY_MS, isMissingRelation, sumDaily } from '../lib/clientErrors';
+import { fetchAll } from '../lib/fetchAll';
 
 function topSubjects(threads) {
   const counts = {};
@@ -34,6 +36,8 @@ export default function Overview() {
   const [aiLeaderboard, setAiLeaderboard] = useState({ loading: true, rows: [] });
   const [recentQuestions, setRecentQuestions] = useState({ loading: true, rows: [] });
   const [errors24h, setErrors24h] = useState(null); // null = لسه بيحمّل أو الجدول مش موجود
+  // كروت الأعطال الجديدة (من views sql/supabase_client_errors_v2.sql). null = الـ views مش موجودة لسه
+  const [errorCards, setErrorCards] = useState(null); // { bugToday, bugYesterday, regressed }
   const [health, setHealth] = useState({ status: 'idle', latencyMs: null });
 
   const checkHealth = async () => {
@@ -58,10 +62,32 @@ export default function Overview() {
     loadAiLeaderboard();
     loadRecentQuestions();
     loadErrors24h();
+    loadErrorCards();
   }, []);
 
   // منفصلة عن load() عمدًا: لو sql/supabase_client_errors.sql لسه ماتشغّلش، الكارت بس
   // هيعرض "—" ومش هيكسر باقي صفحة النظرة العامة
+  const loadErrorCards = async () => {
+    const today = cairoDate();
+    const yesterday = cairoDate(Date.now() - DAY_MS);
+    const [daily, regressed] = await Promise.all([
+      fetchAll(() => supabase.from('client_error_daily').select('*').gte('day', yesterday).order('day').order('kind').order('app_version')),
+      supabase.from('client_error_groups').select('*', { count: 'exact', head: true }).eq('regressed', true),
+    ]);
+    const failure = daily.error || regressed.error;
+    if (failure) {
+      // الـ views لسه ماتعملتش: بنرجع للكارت القديم من غير ما نزعج
+      if (!isMissingRelation(failure)) toast('تعذّر تحميل كروت الأعطال', 'error', failure);
+      setErrorCards(null);
+      return;
+    }
+    setErrorCards({
+      bugToday: sumDaily(daily.data, { day: today, kind: 'bug' }),
+      bugYesterday: sumDaily(daily.data, { day: yesterday, kind: 'bug' }),
+      regressed: regressed.count ?? 0,
+    });
+  };
+
   const loadErrors24h = async () => {
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     const { count, error } = await supabase
@@ -210,7 +236,25 @@ export default function Overview() {
     { label: 'الردود', value: stats.replies, icon: '✎', tone: 'ink' },
     { label: 'بلاغات معلّقة', value: stats.reports, icon: '⚑', tone: 'coral' },
     { label: 'حسابات محظورة', value: stats.banned, icon: '⊘', tone: 'coral' },
-    { label: 'أعطال آخر ٢٤ ساعة', value: errors24h ?? '—', icon: '⚠', tone: errors24h > 0 ? 'coral' : 'ink', to: '/client-errors' },
+    ...(errorCards
+      ? [
+          {
+            label: 'أعطال حقيقية النهارده (أجهزة)',
+            value: errorCards.bugToday,
+            sub: `أمس: ${errorCards.bugYesterday}`,
+            icon: '⚠',
+            tone: errorCards.bugToday > 0 ? 'coral' : 'ink',
+            to: '/client-errors',
+          },
+          {
+            label: 'عطل رجع تاني بعد الإصلاح',
+            value: errorCards.regressed,
+            icon: '↺',
+            tone: errorCards.regressed > 0 ? 'coral' : 'ink',
+            to: '/client-errors?filter=regressed',
+          },
+        ]
+      : [{ label: 'أعطال آخر ٢٤ ساعة', value: errors24h ?? '—', icon: '⚠', tone: errors24h > 0 ? 'coral' : 'ink', to: '/client-errors' }]),
   ];
 
   if (loading) return <Spinner />;
@@ -221,7 +265,7 @@ export default function Overview() {
     <div>
       <PageHeader eyebrow="لوحة التحكم" title="نظرة عامة" />
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-4 mb-8">
         {cards.map((c) => {
           const Wrapper = c.to ? Link : 'div';
           return (
@@ -231,6 +275,7 @@ export default function Overview() {
             </div>
             <p className="text-2xl font-extrabold font-messiri">{c.value}</p>
             <p className="text-sm text-muted">{c.label}</p>
+            {c.sub && <p className="text-[11px] text-muted mt-0.5">{c.sub}</p>}
           </Wrapper>
           );
         })}

@@ -23,11 +23,10 @@ function jsonResponse(body: unknown, status = 200) {
 }
 
 Deno.serve(async (req) => {
-  if (WEBHOOK_SECRET) {
-    const secret = req.headers.get('x-webhook-secret');
-    if (secret !== WEBHOOK_SECRET) {
-      return jsonResponse({ error: 'مفيش تفويض' }, 401);
-    }
+  // مقفولة لو السر مش متضبط (قبل كده لو WEBHOOK_SECRET اتمسح الدالة كانت بتفتح لأي حد)
+  const secret = req.headers.get('x-webhook-secret');
+  if (!WEBHOOK_SECRET || secret !== WEBHOOK_SECRET) {
+    return jsonResponse({ error: 'مفيش تفويض' }, 401);
   }
 
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);

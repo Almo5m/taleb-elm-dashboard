@@ -12,8 +12,9 @@ create table if not exists public.ai_rate_limit (
   window_start timestamptz not null default now(),
   request_count int not null default 0
 );
--- مفيش RLS ولا policies هنا عمدًا — الجدول ده بيتقرا ويتكتب من
--- ai-assistant بمفتاح service_role بس، مش محتاج يبان لحد تاني خالص.
+-- ⚠️ الجدول ده بيتقرا ويتكتب من ai-assistant بمفتاح service_role بس، فلازم RLS يكون شغّال عليه
+-- (RLS شغّال + مفيش policies = مقفول تمامًا قدام الـ API). من غير RLS أي حد معاه الـ anon key
+-- يقدر يقراه ويعدّله. الإصلاح في sql/supabase_security_hardening.sql.
 
 -- ==========================================================
 -- 2) Debounce لتنبيهات فشل Gemini (عشان لو حصل outage مايغرقش تليجرام)

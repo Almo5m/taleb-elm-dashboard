@@ -100,6 +100,80 @@ async function alertGeminiFailure(admin: ReturnType<typeof createClient>, detail
   }
 }
 
+// زيادة العدّادات ذرّيًا عن طريق ai_record_usage (sql/supabase_ai_usage_alerts.sql).
+// لو الدالة لسه مااتعملتش في الـ DB بنرجع للطريقة القديمة (قراءة ثم كتابة)،
+// عشان نشر الفنكشن قبل تشغيل ملف SQL مايوقّفش المساعد.
+async function recordUsage(
+  admin: ReturnType<typeof createClient>,
+  userId: string,
+  today: string,
+  monthKey: string,
+  dailyCount: number,
+  monthlyCount: number,
+): Promise<number> {
+  const { data, error } = await admin.rpc('ai_record_usage', {
+    p_user_id: userId,
+    p_usage_date: today,
+    p_month: monthKey,
+  });
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!error && row && typeof row.monthly_count === 'number') return row.monthly_count;
+
+  if (error) console.error('ai_record_usage failed, using fallback:', error.message);
+  await admin
+    .from('ai_usage_daily')
+    .upsert({ user_id: userId, usage_date: today, message_count: dailyCount + 1 }, { onConflict: 'user_id,usage_date' });
+  await admin
+    .from('ai_usage_monthly')
+    .upsert({ month: monthKey, message_count: monthlyCount + 1 }, { onConflict: 'month' });
+  return monthlyCount + 1;
+}
+
+// تنبيه تليجرام لما الاستهلاك الشهري يوصل 80% ثم 100% من السقف (مرة واحدة لكل نسبة في الشهر).
+// عمره ما يكسر رد الطالب: أي خطأ هنا بيتسجّل في اللوج بس.
+async function alertUsageThresholds(
+  admin: ReturnType<typeof createClient>,
+  monthlyCount: number,
+  monthlyLimit: number,
+  monthKey: string,
+) {
+  try {
+    if (!(monthlyLimit > 0)) return;
+    const reached = [100, 80].filter((t) => monthlyCount >= Math.ceil((monthlyLimit * t) / 100));
+    if (reached.length === 0) return;
+
+    let messageSent = false;
+    for (const threshold of reached) {
+      const { data, error } = await admin
+        .from('ai_usage_alerts')
+        .upsert({ month: monthKey, threshold, cap: monthlyLimit }, { onConflict: 'month,threshold,cap', ignoreDuplicates: true })
+        .select();
+      if (error) {
+        console.error('ai_usage_alerts failed:', error.message);
+        return;
+      }
+      const firstTime = !!data && data.length > 0;
+      if (!firstTime || messageSent) continue; // اتبعت قبل كده، أو بعتنا رسالة أعلى نسبة بالفعل
+
+      const token = Deno.env.get('TELEGRAM_BOT_TOKEN');
+      const chatId = Deno.env.get('TELEGRAM_CHAT_ID');
+      if (!token || !chatId) return;
+
+      const text = threshold >= 100
+        ? `🛑 المساعد الذكي (بو) وقف لكل الطلاب: وصل السقف الشهري (${monthlyCount} من ${monthlyLimit} رسالة، ${monthKey}).\nارفع السقف من الإعدادات ← المساعد الذكي لو عايزه يشتغل تاني قبل الشهر الجاي.`
+        : `⚠️ المساعد الذكي (بو) وصل 80% من السقف الشهري (${monthlyCount} من ${monthlyLimit} رسالة، ${monthKey}).\nلو الاستهلاك مستمر هيقف لكل الطلاب. تقدر ترفع السقف من الإعدادات ← المساعد الذكي.`;
+      await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: chatId, text }),
+      });
+      messageSent = true;
+    }
+  } catch (e) {
+    console.error('alertUsageThresholds error:', e);
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method !== 'POST') {
     return jsonResponse({ error: 'method not allowed' }, 405);
@@ -302,13 +376,14 @@ Deno.serve(async (req) => {
   }
 
   // 6) تحديث العدادات (بعد نجاح الرد، مش قبله — عشان طلب فاشل ميستهلكش الحد)
-  await admin
-    .from('ai_usage_daily')
-    .upsert({ user_id: userId, usage_date: today, message_count: dailyCount + 1 }, { onConflict: 'user_id,usage_date' });
+  const newMonthlyCount = await recordUsage(admin, userId, today, monthKey, dailyCount, monthlyCount);
 
-  await admin
-    .from('ai_usage_monthly')
-    .upsert({ month: monthKey, message_count: monthlyCount + 1 }, { onConflict: 'month' });
+  // تنبيه الـ 80% / 100%: بعد ما الرد يتبعت للطالب لو البيئة بتدعم waitUntil، عشان مايتأخرش
+  const alertJob = alertUsageThresholds(admin, newMonthlyCount, monthlyLimit, monthKey);
+  // deno-lint-ignore no-explicit-any
+  const edgeRuntime = (globalThis as any).EdgeRuntime;
+  if (edgeRuntime?.waitUntil) edgeRuntime.waitUntil(alertJob);
+  else await alertJob;
 
   return jsonResponse({ reply: replyText });
 });
