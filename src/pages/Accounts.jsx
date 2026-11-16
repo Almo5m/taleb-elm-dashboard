@@ -171,12 +171,12 @@ export default function Accounts() {
         action={<button onClick={exportCsv} className="btn-ghost">تصدير CSV ⭳</button>}
       />
 
-      <div className="card p-4 mb-4 flex flex-col md:flex-row gap-3">
+      <div className="card p-4 mb-4 flex flex-col md:flex-row md:flex-wrap gap-3">
         <input
           placeholder="ابحث بالاسم أو الإيميل"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="input-field md:flex-1"
+          className="input-field md:flex-1 md:min-w-[16rem]"
         />
         <select value={gradeFilter} onChange={(e) => setGradeFilter(e.target.value)} className="input-field md:w-56">
           <option>الكل</option>
@@ -216,7 +216,7 @@ export default function Accounts() {
       </div>
 
       {studentsWithoutAi.length > 0 && !loading && (
-        <div className="card p-3 mb-4 flex items-center justify-between gap-3 flex-wrap bg-parchment/60">
+        <div className="card p-3 mb-4 flex items-center justify-between gap-3 flex-wrap bg-surface/60">
           <p className="text-sm text-muted">
             <span className="font-semibold text-inktext">{studentsWithoutAi.length}</span> طالب مالهمش المساعد الذكي مفعّل.
           </p>
@@ -255,14 +255,14 @@ export default function Accounts() {
                 {p.avatar_url ? (
                   <img src={p.avatar_url} className="w-10 h-10 rounded-full object-cover border-2 border-ink shrink-0" alt="" />
                 ) : (
-                  <div className="w-10 h-10 rounded-full bg-ink text-gold flex items-center justify-center text-sm font-messiri shrink-0">
+                  <div className="w-10 h-10 rounded-full bg-ink text-accent flex items-center justify-center text-sm font-messiri shrink-0">
                     {(p.name || '؟').charAt(0)}
                   </div>
                 )}
                 <div className="min-w-0">
                   <p className="font-semibold flex items-center gap-2 flex-wrap">
                     {p.name || 'بدون اسم'}
-                    {p.role === 'admin' && <Stamp tone="gold">أدمن</Stamp>}
+                    {p.role === 'admin' && <Stamp tone="accent">أدمن</Stamp>}
                     {p.role === 'moderator' && <Stamp tone="ink">مشرف</Stamp>}
                     {p.banned && <Stamp tone="coral">محظور</Stamp>}
                     {getAiAccess(p.id).enabled && <Stamp tone="forest">AI مفعّل</Stamp>}
@@ -270,7 +270,7 @@ export default function Accounts() {
                   <p className="text-xs text-muted truncate">
                     {p.email || '—'} · {p.system || '—'} • {p.grade || '—'} {p.track ? `• ${p.track}` : ''}
                   </p>
-                  <p className="text-xs text-muted/70 mt-0.5">
+                  <p className="text-xs text-muted mt-0.5">
                     سجّل في {new Date(p.created_at).toLocaleDateString('ar-EG', { day: 'numeric', month: 'short', year: 'numeric' })}
                   </p>
                 </div>

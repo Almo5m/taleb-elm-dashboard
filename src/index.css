@@ -4,24 +4,24 @@
 
 body {
   font-family: 'Cairo', sans-serif;
-  background-color: #F7F2E6;
-  color: #1C2620;
+  background-color: #F3F6FB;
+  color: #14213D;
 }
 
 ::selection {
-  background: #E3A72E;
-  color: #132019;
+  background: #20E1B2;
+  color: #0A2A5E;
 }
 
 /* شريط تمرير رفيع بيتماشى مع الهوية */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #E7DFC9; border-radius: 999px; }
-::-webkit-scrollbar-thumb:hover { background: #cfc4a0; }
+::-webkit-scrollbar-thumb { background: #DCE4F0; border-radius: 999px; }
+::-webkit-scrollbar-thumb:hover { background: #BFCCE0; }
 
-/* خط تنقيط يشبه حافة الورقة المقطوعة من دفتر */
+/* خط تنقيط بلون الخلفية */
 .torn-edge {
-  background-image: radial-gradient(circle, #F7F2E6 2.5px, transparent 2.6px);
+  background-image: radial-gradient(circle, #F3F6FB 2.5px, transparent 2.6px);
   background-size: 14px 10px;
   background-position: right 6px top -5px;
   height: 10px;
@@ -52,16 +52,16 @@ body {
 }
 
 .card {
-  background: #FFFDF8;
-  border: 1px solid #E7DFC9;
+  background: #FFFFFF;
+  border: 1px solid #DCE4F0;
   border-radius: 18px;
-  box-shadow: 0 1px 0 0 rgba(19,32,25,0.04), 0 8px 24px -14px rgba(19,32,25,0.25);
+  box-shadow: 0 1px 0 0 rgba(10,42,94,0.04), 0 8px 24px -16px rgba(10,42,94,0.28);
 }
 
 .input-field {
   width: 100%;
-  border: 2px solid #E7DFC9;
-  background: #FFFDF8;
+  border: 2px solid #DCE4F0;
+  background: #FFFFFF;
   border-radius: 12px;
   padding: 10px 14px;
   font-size: 14px;
@@ -69,7 +69,8 @@ body {
   transition: border-color 0.15s ease;
 }
 .input-field:focus {
-  border-color: #132019;
+  border-color: #0A2A5E;
+  box-shadow: 0 0 0 3px rgba(32, 225, 178, 0.25);
 }
 
 .btn-primary {
@@ -77,16 +78,17 @@ body {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  background: #132019;
-  color: #F7F2E6;
-  border: 2px solid #132019;
+  background: #0A2A5E;
+  color: #FFFFFF;
+  border: 2px solid #0A2A5E;
   border-radius: 12px;
   padding: 10px 20px;
   font-weight: 700;
   font-size: 14px;
   transition: all 0.15s ease;
 }
-.btn-primary:hover:not(:disabled) { background: #F7F2E6; color: #132019; }
+.btn-primary:hover:not(:disabled) { background: #12376F; border-color: #12376F; }
+.btn-primary:focus-visible, .btn-ghost:focus-visible, .btn-danger:focus-visible { outline: 3px solid rgba(32, 225, 178, 0.55); outline-offset: 2px; }
 .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .btn-ghost {
@@ -95,15 +97,15 @@ body {
   justify-content: center;
   gap: 8px;
   background: transparent;
-  color: #132019;
-  border: 2px solid #E7DFC9;
+  color: #0A2A5E;
+  border: 2px solid #DCE4F0;
   border-radius: 12px;
   padding: 9px 18px;
   font-weight: 700;
   font-size: 14px;
   transition: all 0.15s ease;
 }
-.btn-ghost:hover { border-color: #132019; }
+.btn-ghost:hover { border-color: #0A2A5E; background: #FFFFFF; }
 
 .btn-danger {
   display: inline-flex;
@@ -111,12 +113,12 @@ body {
   justify-content: center;
   gap: 8px;
   background: transparent;
-  color: #C1402F;
-  border: 2px solid #E15A4C;
+  color: #B3352A;
+  border: 2px solid #D0402F;
   border-radius: 12px;
   padding: 9px 18px;
   font-weight: 700;
   font-size: 14px;
   transition: all 0.15s ease;
 }
-.btn-danger:hover { background: #E15A4C; color: #FFFDF8; }
+.btn-danger:hover { background: #D0402F; color: #FFFFFF; }

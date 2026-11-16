@@ -3,7 +3,7 @@ import { supabase } from '../supabaseClient';
 import { PageHeader, Spinner, Stamp, EmptyState, useToast, useConfirm } from '../components/UI';
 
 const GRADES = ['الصف الأول الثانوي', 'الصف الثاني الثانوي', 'الصف الثالث الثانوي'];
-const STATUS_TONE = { pending: 'gold', sent: 'forest', failed: 'coral' };
+const STATUS_TONE = { pending: 'amber', sent: 'forest', failed: 'coral' };
 const STATUS_LABEL = { pending: 'معلّق / مجدول', sent: 'اتبعت', failed: 'فشل' };
 const TARGET_LABEL = { all: 'كل الطلاب', grade: 'صف معيّن', single_user: 'طالب واحد' };
 
@@ -113,7 +113,7 @@ export default function Emails() {
   return (
     <div>
       <PageHeader eyebrow="تواصل" title="الإيميلات" />
-      <div className="card p-4 mb-6 bg-gold/10 border border-gold/30">
+      <div className="card p-4 mb-6 bg-accent/10 border border-accent/30">
         <p className="text-sm">
           ⚠️ الميزة دي متوقفة مؤقتًا لحد ما يتجهّز دومين خاص بالتطبيق (Resend محتاج دومين موثّق
           عشان يبعت لإيميلات حقيقية). أي إرسال دلوقتي هيفشل أو يوصل لإيميلك انت بس (وضع اختبار).
@@ -132,7 +132,7 @@ export default function Emails() {
               key={key}
               onClick={() => setTargetType(key)}
               className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition ${
-                targetType === key ? 'bg-ink text-gold' : 'bg-parchment text-muted'
+                targetType === key ? 'bg-ink text-accent' : 'bg-surface text-muted'
               }`}
             >
               {label}
@@ -155,12 +155,12 @@ export default function Emails() {
               className="input-field"
             />
             {userResults.length > 0 && !selectedUser && (
-              <div className="absolute z-10 w-full bg-white border border-parchment-line rounded-lg mt-1 shadow-lg max-h-48 overflow-y-auto">
+              <div className="absolute z-10 w-full bg-white border border-surface-line rounded-lg mt-1 shadow-lg max-h-48 overflow-y-auto">
                 {userResults.map((u) => (
                   <button
                     key={u.id}
                     onClick={() => { setSelectedUser(u); setUserResults([]); }}
-                    className="w-full text-right px-3 py-2 hover:bg-parchment/60 text-sm"
+                    className="w-full text-right px-3 py-2 hover:bg-surface/60 text-sm"
                   >
                     <p className="font-semibold">{u.name}</p>
                     <p className="text-xs text-muted">{u.email}</p>
@@ -204,7 +204,7 @@ export default function Emails() {
       ) : log.length === 0 ? (
         <EmptyState icon="✉" title="مفيش إيميلات اتبعتت لسه" />
       ) : (
-        <div className="card divide-y divide-parchment-line overflow-hidden">
+        <div className="card divide-y divide-surface-line overflow-hidden">
           {log.map((e) => (
             <div key={e.id} className="flex items-center gap-4 p-4">
               <div className="flex-1 min-w-0">

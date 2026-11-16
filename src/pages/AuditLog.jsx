@@ -6,7 +6,7 @@ import { exportToCsv } from '../lib/csv';
 const ACTION_TONE = {
   ban: 'coral',
   unban: 'forest',
-  promote: 'gold',
+  promote: 'accent',
   demote: 'coral',
   delete_thread: 'coral',
   delete_reply: 'coral',
@@ -17,12 +17,12 @@ const ACTION_TONE = {
   bulk_ban: 'coral',
   bulk_delete_threads: 'coral',
   ai_enable: 'forest',
-  client_error_status: 'gold',
+  client_error_status: 'amber',
   client_error_delete: 'coral',
   bulk_ai_enable: 'forest',
   bulk_ai_disable: 'coral',
   ai_disable: 'coral',
-  ai_limit_override: 'gold',
+  ai_limit_override: 'amber',
 };
 
 const ACTION_LABEL = {
@@ -156,7 +156,7 @@ export default function AuditLog() {
       ) : filtered.length === 0 ? (
         <EmptyState icon="⧉" title="مفيش نتائج مطابقة للفلاتر دي" />
       ) : (
-        <div className="card divide-y divide-parchment-line overflow-hidden">
+        <div className="card divide-y divide-surface-line overflow-hidden">
           {filtered.map((r) => (
             <div key={r.id} className="p-4 flex items-start gap-3">
               <Stamp tone={ACTION_TONE[r.action] || 'ink'}>{ACTION_LABEL[r.action] || r.action}</Stamp>
@@ -166,7 +166,7 @@ export default function AuditLog() {
                   {r.admin_name || 'أدمن'} · {new Date(r.created_at).toLocaleString('ar-EG')}
                 </p>
                 {r.target_id && (
-                  <p className="text-[11px] text-muted/70 mt-0.5" dir="ltr">
+                  <p className="text-[11px] text-muted mt-0.5" dir="ltr">
                     {r.target_type}: <CopyText value={r.target_id} />
                   </p>
                 )}

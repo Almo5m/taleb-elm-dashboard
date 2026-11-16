@@ -265,12 +265,12 @@ export default function Overview() {
     <div>
       <PageHeader eyebrow="لوحة التحكم" title="نظرة عامة" />
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-4 mb-8">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 mb-8">
         {cards.map((c) => {
           const Wrapper = c.to ? Link : 'div';
           return (
           <Wrapper key={c.label} {...(c.to ? { to: c.to } : {})} className="card p-5 block">
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg mb-3 ${c.tone === 'coral' ? 'bg-coral/10 text-coral' : 'bg-ink text-gold'}`}>
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg mb-3 ${c.tone === 'coral' ? 'bg-coral/10 text-coral' : 'bg-ink text-accent'}`}>
               {c.icon}
             </div>
             <p className="text-2xl font-extrabold font-messiri">{c.value}</p>
@@ -281,7 +281,7 @@ export default function Overview() {
         })}
       </div>
 
-      <div className="grid md:grid-cols-2 gap-5 mb-5">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
         <div className="card p-6">
           <p className="font-messiri font-bold mb-1">تسجيلات آخر ٧ أيام</p>
           <p className="text-xs text-muted mb-5">عدد الطلاب اللي عملوا حساب جديد</p>
@@ -295,7 +295,7 @@ export default function Overview() {
               <div key={i} className="flex-1 flex flex-col justify-end items-center gap-2">
                 <div
                   className="w-full rounded-t-md bg-ink/90"
-                  style={{ height: `${Math.max((v / maxBar) * 100, v > 0 ? 8 : 2)}%`, background: v === 0 ? '#E7DFC9' : undefined }}
+                  style={{ height: `${Math.max((v / maxBar) * 100, v > 0 ? 8 : 2)}%`, background: v === 0 ? '#DCE4F0' : undefined }}
                   title={`${v}`}
                 />
                 <span className="text-[10px] text-muted">{daysAgoLabel(6 - i)}</span>
@@ -322,8 +322,8 @@ export default function Overview() {
                       <span className="font-semibold">{name}</span>
                       <span className="text-muted">{count}</span>
                     </div>
-                    <div className="h-2 rounded-full bg-parchment overflow-hidden">
-                      <div className="h-full bg-gold rounded-full" style={{ width: `${(count / max) * 100}%` }} />
+                    <div className="h-2 rounded-full bg-surface overflow-hidden">
+                      <div className="h-full bg-accent rounded-full" style={{ width: `${(count / max) * 100}%` }} />
                     </div>
                   </div>
                 );
@@ -334,7 +334,7 @@ export default function Overview() {
 
       </div>
 
-      <div className="grid md:grid-cols-2 gap-5 mb-5">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
         <div className="card p-6">
           <div className="flex items-center justify-between mb-1">
             <p className="font-messiri font-bold">المساعد الذكي</p>
@@ -352,8 +352,8 @@ export default function Overview() {
               <p className="text-2xl font-extrabold font-messiri mb-1">
                 {aiInfo.count.toLocaleString('en-US')} <span className="text-sm font-normal text-muted">/ {aiInfo.limit.toLocaleString('en-US')} رسالة</span>
               </p>
-              <div className="h-2 rounded-full bg-parchment overflow-hidden mb-3">
-                <div className="h-full bg-gold rounded-full" style={{ width: `${Math.min((aiInfo.count / (aiInfo.limit || 1)) * 100, 100)}%` }} />
+              <div className="h-2 rounded-full bg-surface overflow-hidden mb-3">
+                <div className="h-full bg-accent rounded-full" style={{ width: `${Math.min((aiInfo.count / (aiInfo.limit || 1)) * 100, 100)}%` }} />
               </div>
               {aiInfo.activeStudents === 0 ? (
                 <p className="text-xs text-coral-dark bg-coral/10 border border-coral/30 rounded-lg px-2 py-1.5">
@@ -384,7 +384,7 @@ export default function Overview() {
         </div>
       </div>
 
-      <div className="grid md:grid-cols-2 gap-5 mb-5">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
         <div className="card p-6">
           <div className="flex items-center justify-between mb-1">
             <p className="font-messiri font-bold">أكتر الطلاب استخدامًا للـ AI</p>
@@ -396,16 +396,16 @@ export default function Overview() {
           ) : aiLeaderboard.rows.length === 0 ? (
             <p className="text-sm text-muted">مفيش استخدام مسجّل الشهر ده لسه</p>
           ) : (
-            <div className="divide-y divide-parchment-line">
+            <div className="divide-y divide-surface-line">
               {aiLeaderboard.rows.map((r, i) => (
                 <Link
                   key={r.user_id}
                   to={`/accounts/${r.user_id}`}
-                  className="flex items-center gap-3 py-2 hover:bg-parchment/60 -mx-2 px-2 rounded-lg"
+                  className="flex items-center gap-3 py-2 hover:bg-surface/60 -mx-2 px-2 rounded-lg"
                 >
                   <span className="w-6 text-xs font-bold text-muted shrink-0">{i + 1}</span>
                   <span className="flex-1 min-w-0 truncate text-sm font-semibold">{r.full_name}</span>
-                  <Stamp tone="gold">{r.message_count} رسالة</Stamp>
+                  <Stamp tone="accent">{r.message_count} رسالة</Stamp>
                 </Link>
               ))}
             </div>
@@ -424,7 +424,7 @@ export default function Overview() {
           ) : recentQuestions.rows.length === 0 ? (
             <p className="text-sm text-muted">مفيش أسئلة مسجّلة لسه</p>
           ) : (
-            <div className="divide-y divide-parchment-line max-h-72 overflow-y-auto">
+            <div className="divide-y divide-surface-line max-h-72 overflow-y-auto">
               {recentQuestions.rows.map((q) => (
                 <div key={q.id} className="py-2">
                   <div className="flex items-center gap-2 mb-0.5">
@@ -432,7 +432,7 @@ export default function Overview() {
                     {q.category && (
                       <Stamp
                         tone={
-                          q.category === 'منهج' ? 'forest' : q.category === 'خارج النطاق' ? 'coral' : 'gold'
+                          q.category === 'منهج' ? 'forest' : q.category === 'خارج النطاق' ? 'coral' : 'amber'
                         }
                       >
                         {q.category}
@@ -447,7 +447,7 @@ export default function Overview() {
         </div>
       </div>
 
-      <div className="grid gap-5">
+      <div className="grid grid-cols-1 gap-5">
         <div className="card p-6">
           <div className="flex items-center justify-between mb-4">
             <p className="font-messiri font-bold">آخر نشاط</p>
@@ -458,7 +458,7 @@ export default function Overview() {
           ) : (
             <div className="space-y-3">
               {activity.map((a) => (
-                <div key={`${a.kind}-${a.id}`} className="flex items-center gap-3 pb-3 border-b border-parchment-line last:border-0 last:pb-0">
+                <div key={`${a.kind}-${a.id}`} className="flex items-center gap-3 pb-3 border-b border-surface-line last:border-0 last:pb-0">
                   {a.kind === 'thread' ? <Stamp tone="ink">سؤال</Stamp> : <Stamp tone="coral">بلاغ</Stamp>}
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold truncate">{a.kind === 'thread' ? a.title : a.reason}</p>

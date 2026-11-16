@@ -128,12 +128,12 @@ export default function Forum() {
     <div>
       <PageHeader eyebrow={`${threads.length} سؤال في المنتدى`} title="إدارة المنتدى" />
 
-      <div className="card p-4 mb-4 flex flex-col md:flex-row gap-3">
+      <div className="card p-4 mb-4 flex flex-col md:flex-row md:flex-wrap gap-3">
         <input
           placeholder="ابحث في العناوين والأسئلة"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="input-field md:flex-1"
+          className="input-field md:flex-1 md:min-w-[16rem]"
         />
         <select value={gradeFilter} onChange={(e) => setGradeFilter(e.target.value)} className="input-field md:w-56">
           {grades.map((g) => <option key={g} value={g}>{g}</option>)}
@@ -169,12 +169,12 @@ export default function Forum() {
                   <div className="flex-1 cursor-pointer min-w-0" onClick={() => toggleExpand(t.id)}>
                     <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                       <Stamp tone="ink">{t.grade}</Stamp>
-                      {t.track && <span className="text-xs border border-parchment-line px-2 py-0.5 rounded-lg text-muted">{t.track}</span>}
-                      {t.subject_name && <span className="text-xs bg-ink text-parchment px-2 py-0.5 rounded-lg">{t.subject_name}</span>}
+                      {t.track && <span className="text-xs border border-surface-line px-2 py-0.5 rounded-lg text-muted">{t.track}</span>}
+                      {t.subject_name && <span className="text-xs bg-ink text-surface px-2 py-0.5 rounded-lg">{t.subject_name}</span>}
                     </div>
                     <h3 className="font-bold">{t.title}</h3>
                     <p className="text-sm text-muted mt-1 line-clamp-2">{t.body}</p>
-                    <p className="text-xs text-muted/70 mt-2">
+                    <p className="text-xs text-muted mt-2">
                       {t.author_name} • {new Date(t.created_at).toLocaleDateString('ar-EG')} • {t.replies_count} رد
                     </p>
                   </div>
@@ -185,16 +185,16 @@ export default function Forum() {
               </div>
 
               {expandedId === t.id && (
-                <div className="border-t border-parchment-line bg-parchment p-4 space-y-2">
+                <div className="border-t border-surface-line bg-surface p-4 space-y-2">
                   {!replies[t.id] || replies[t.id].length === 0 ? (
                     <p className="text-sm text-muted">مفيش ردود</p>
                   ) : (
                     replies[t.id].map((r) => (
-                      <div key={r.id} className="bg-parchment-card border border-parchment-line rounded-xl p-3 flex items-start justify-between gap-3">
+                      <div key={r.id} className="bg-surface-card border border-surface-line rounded-xl p-3 flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <p className="text-sm font-semibold">{r.author_name}</p>
                           <p className="text-sm text-muted">{r.body}</p>
-                          <p className="text-xs text-muted/70 mt-1">{new Date(r.created_at).toLocaleDateString('ar-EG')}</p>
+                          <p className="text-xs text-muted mt-1">{new Date(r.created_at).toLocaleDateString('ar-EG')}</p>
                         </div>
                         <button onClick={() => deleteReply(t.id, r.id)} className="text-xs font-semibold text-muted hover:text-coral px-2 py-1 whitespace-nowrap shrink-0">
                           حذف

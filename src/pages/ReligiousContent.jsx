@@ -128,7 +128,7 @@ function ItemsEditor({ initial, onSave }) {
     <div className="space-y-3">
       <div className="space-y-2 max-h-96 overflow-y-auto">
         {list.map((it, idx) => (
-          <div key={it._key} className="bg-parchment rounded-xl p-3 space-y-2">
+          <div key={it._key} className="bg-surface rounded-xl p-3 space-y-2">
             <textarea
               value={it.text}
               onChange={(e) => updateField(it._key, 'text', e.target.value)}

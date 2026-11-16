@@ -50,7 +50,7 @@ export default function Leaderboard() {
             key={o.key}
             onClick={() => setSortBy(o.key)}
             className={`px-4 py-2 rounded-xl text-sm font-semibold border-2 transition ${
-              sortBy === o.key ? 'bg-ink text-parchment border-ink' : 'border-parchment-line text-muted hover:border-ink'
+              sortBy === o.key ? 'bg-ink text-surface border-ink' : 'border-surface-line text-muted hover:border-ink'
             }`}
           >
             {o.label}
@@ -63,12 +63,12 @@ export default function Leaderboard() {
       ) : rows.length === 0 ? (
         <EmptyState icon="☰" title="مفيش بيانات في لوحة التصنيف لسه" hint="بتتحدث تلقائيًا من التطبيق كل ما الطالب يذاكر" />
       ) : (
-        <div className="card divide-y divide-parchment-line overflow-hidden">
+        <div className="card divide-y divide-surface-line overflow-hidden">
           {rows.map((r, i) => (
             <div key={r.user_id} className="flex items-center gap-4 p-4">
               <div
                 className={`w-8 h-8 rounded-full flex items-center justify-center font-messiri font-bold text-sm shrink-0 ${
-                  i === 0 ? 'bg-gold text-ink' : i === 1 ? 'bg-parchment-line text-inktext' : i === 2 ? 'bg-coral/20 text-coral-dark' : 'bg-parchment text-muted'
+                  i === 0 ? 'bg-accent text-ink' : i === 1 ? 'bg-surface-line text-inktext' : i === 2 ? 'bg-coral/20 text-coral-dark' : 'bg-surface text-muted'
                 }`}
               >
                 {i + 1}
@@ -76,7 +76,7 @@ export default function Leaderboard() {
               {r.avatar_url ? (
                 <img src={r.avatar_url} className="w-9 h-9 rounded-full object-cover border-2 border-ink shrink-0" alt="" />
               ) : (
-                <div className="w-9 h-9 rounded-full bg-ink text-gold flex items-center justify-center text-xs font-messiri shrink-0">
+                <div className="w-9 h-9 rounded-full bg-ink text-accent flex items-center justify-center text-xs font-messiri shrink-0">
                   {(r.display_name || '؟').charAt(0)}
                 </div>
               )}
@@ -84,7 +84,7 @@ export default function Leaderboard() {
               <div className="flex gap-2 shrink-0">
                 <Stamp tone="ink">{Number(r.total_study_hours || 0).toFixed(1)} ساعة</Stamp>
                 <Stamp tone="forest">{r.current_streak || 0} يوم</Stamp>
-                <Stamp tone="gold">{r.achievements_count || 0} إنجاز</Stamp>
+                <Stamp tone="accent">{r.achievements_count || 0} إنجاز</Stamp>
               </div>
             </div>
           ))}

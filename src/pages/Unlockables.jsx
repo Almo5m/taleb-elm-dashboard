@@ -280,7 +280,7 @@ export default function Unlockables() {
       <div className="card p-4 mb-5 flex flex-wrap items-center gap-3">
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold">{items.length} قاعدة</p>
-          <p className={`text-xs ${dirty ? 'text-gold-dark font-semibold' : 'text-muted'}`}>
+          <p className={`text-xs ${dirty ? 'text-accent-dark font-semibold' : 'text-muted'}`}>
             {dirty ? 'فيه تغييرات لسه مش محفوظة' : 'كل التغييرات محفوظة'}
           </p>
         </div>
@@ -309,11 +309,11 @@ export default function Unlockables() {
         <div className="card p-5 mb-5">
           <p className="font-messiri font-bold mb-4">{form.mode === 'add' ? 'قاعدة جديدة' : 'تعديل القاعدة'}</p>
 
-          <div className="grid md:grid-cols-2 gap-4 mb-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div className="md:col-span-2">
               <label className={labelClass}>الميزة</label>
               {form.mode === 'edit' && !isOrphanEdit ? (
-                <p className="input-field bg-parchment/60">
+                <p className="input-field bg-surface/60">
                   {getFeature(form.feature_id)?.label ?? form.feature_id}
                 </p>
               ) : (
@@ -391,7 +391,7 @@ export default function Unlockables() {
           </label>
 
           <p className="text-xs text-muted font-semibold mb-1">الطالب هيشوف:</p>
-          <div className="bg-parchment/60 rounded-lg p-3 text-sm mb-4 break-words" dir="auto" data-testid="form-preview">
+          <div className="bg-surface/60 rounded-lg p-3 text-sm mb-4 break-words" dir="auto" data-testid="form-preview">
             {formPreview ?? <span className="text-muted">اختار نوع الشرط وحط القيمة عشان تظهر المعاينة</span>}
           </div>
 
@@ -424,7 +424,7 @@ export default function Unlockables() {
       ) : (
         <div className="card overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-parchment/60 text-xs text-muted">
+            <thead className="bg-surface/60 text-xs text-muted">
               <tr>
                 <th className="p-3 text-right w-10">#</th>
                 <th className="p-3 text-right">الميزة</th>
@@ -440,7 +440,7 @@ export default function Unlockables() {
                 const rowProblems = problems.get(index);
                 const preview = previewText(item ?? {});
                 return (
-                  <tr key={`${item?.feature_id}-${index}`} className={`border-t border-parchment-line/60 align-top ${rowProblems ? 'bg-coral/10' : ''}`}>
+                  <tr key={`${item?.feature_id}-${index}`} className={`border-t border-surface-line/60 align-top ${rowProblems ? 'bg-coral/10' : ''}`}>
                     <td className="p-3 text-muted">{index + 1}</td>
                     <td className="p-3">
                       <p className="font-semibold">{feature?.label ?? <span className="text-coral-dark">غير موجودة في القايمة</span>}</p>

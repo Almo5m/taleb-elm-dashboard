@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import BrandLogo from '../components/BrandLogo';
 import { supabase } from '../supabaseClient';
 
 export default function ResetPassword() {
@@ -50,16 +51,12 @@ export default function ResetPassword() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-ink px-4 relative overflow-hidden">
-      <div
-        className="absolute inset-0 opacity-[0.06] pointer-events-none"
-        style={{ backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 39px, #E3A72E 40px)' }}
-      />
-      <div className="absolute -top-24 -left-24 w-72 h-72 rounded-full bg-gold/10 blur-3xl" />
-      <div className="absolute -bottom-24 -right-24 w-72 h-72 rounded-full bg-forest/20 blur-3xl" />
+      {/* توهج هادي واحد بلون الهوية، زي صفحة الدخول */}
+      <div className="absolute -top-24 -left-24 w-72 h-72 rounded-full bg-accent/10 blur-3xl pointer-events-none" />
 
-      <div className="relative bg-parchment-card border border-parchment-line rounded-card p-8 w-full max-w-sm shadow-card animate-riseIn">
-        <div className="w-14 h-14 rounded-2xl bg-ink text-gold flex items-center justify-center mb-5 font-messiri font-extrabold text-2xl">ط</div>
-        <p className="font-messiri text-gold-dark text-sm font-semibold mb-1">طالب علم</p>
+      <div className="relative bg-surface-card border border-surface-line rounded-card p-8 w-full max-w-sm shadow-card animate-riseIn">
+        <BrandLogo size="lg" className="mb-5" />
+        <p className="font-messiri text-accent-dark text-sm font-semibold mb-1">طالب علم</p>
 
         {!ready ? (
           <div className="flex items-center gap-3 text-muted py-6">

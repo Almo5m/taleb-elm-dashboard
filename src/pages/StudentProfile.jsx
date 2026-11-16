@@ -208,20 +208,20 @@ export default function StudentProfile() {
         {profile.avatar_url ? (
           <img src={profile.avatar_url} className="w-16 h-16 rounded-full object-cover border-2 border-ink" alt="" />
         ) : (
-          <div className="w-16 h-16 rounded-full bg-ink text-gold flex items-center justify-center text-2xl font-messiri">
+          <div className="w-16 h-16 rounded-full bg-ink text-accent flex items-center justify-center text-2xl font-messiri">
             {(profile.name || '؟').charAt(0)}
           </div>
         )}
         <div className="min-w-0">
           <p className="font-messiri font-bold text-xl flex items-center gap-2 flex-wrap">
             {profile.name || 'بدون اسم'}
-            {profile.role === 'admin' && <Stamp tone="gold">أدمن</Stamp>}
+            {profile.role === 'admin' && <Stamp tone="accent">أدمن</Stamp>}
             {profile.role === 'moderator' && <Stamp tone="ink">مشرف</Stamp>}
             {profile.banned && <Stamp tone="coral">محظور</Stamp>}
           </p>
           <p className="text-sm text-muted truncate"><CopyText value={profile.email}>{profile.email || '—'}</CopyText></p>
-          <p className="text-[11px] text-muted/70 mt-0.5" dir="ltr">ID: <CopyText value={profile.id} /></p>
-          <p className="text-xs text-muted/70 mt-0.5">
+          <p className="text-[11px] text-muted mt-0.5" dir="ltr">ID: <CopyText value={profile.id} /></p>
+          <p className="text-xs text-muted mt-0.5">
             سجّل في {new Date(profile.created_at).toLocaleDateString('ar-EG', { day: 'numeric', month: 'short', year: 'numeric' })}
           </p>
         </div>
@@ -292,7 +292,7 @@ export default function StudentProfile() {
           </button>
         </div>
 
-        <div className="bg-parchment rounded-xl px-3 py-2.5">
+        <div className="bg-surface rounded-xl px-3 py-2.5">
           <p className="text-xs text-muted font-semibold mb-1">استهلاك النهاردة</p>
           {aiUsage.loading ? (
             <p className="text-sm text-muted">جارِ التحميل...</p>

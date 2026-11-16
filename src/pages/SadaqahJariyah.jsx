@@ -319,7 +319,7 @@ function ImageUploadField({ value, onChange }) {
             className="w-14 h-14 rounded-lg object-cover shrink-0 border border-black/10"
           />
         ) : (
-          <div className="w-14 h-14 rounded-lg bg-parchment shrink-0 flex items-center justify-center text-muted text-xs">
+          <div className="w-14 h-14 rounded-lg bg-surface shrink-0 flex items-center justify-center text-muted text-xs">
             بلا صورة
           </div>
         )}

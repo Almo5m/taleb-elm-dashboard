@@ -9,7 +9,7 @@ function activityTone(updatedAt) {
   if (!updatedAt) return 'ink';
   const diff = Date.now() - new Date(updatedAt).getTime();
   if (diff <= DAY) return 'forest';
-  if (diff <= 7 * DAY) return 'gold';
+  if (diff <= 7 * DAY) return 'amber';
   return 'coral';
 }
 
@@ -101,14 +101,14 @@ export default function UserActivity() {
       ) : sorted.length === 0 ? (
         <EmptyState icon="◇" title="مفيش بيانات نشاط لسه" />
       ) : (
-        <div className="card divide-y divide-parchment-line overflow-hidden">
+        <div className="card divide-y divide-surface-line overflow-hidden">
           {sorted.map((r) => (
             <Link
               key={r.user_id}
               to={`/accounts/${r.user_id}`}
-              className="flex items-center gap-4 p-4 hover:bg-parchment/60"
+              className="flex items-center gap-4 p-4 hover:bg-surface/60"
             >
-              <div className="w-9 h-9 rounded-full bg-ink text-gold flex items-center justify-center text-xs font-messiri shrink-0 overflow-hidden">
+              <div className="w-9 h-9 rounded-full bg-ink text-accent flex items-center justify-center text-xs font-messiri shrink-0 overflow-hidden">
                 {r.avatar_url ? (
                   <img src={r.avatar_url} alt="" className="w-full h-full object-cover" />
                 ) : (

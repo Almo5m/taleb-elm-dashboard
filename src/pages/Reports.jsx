@@ -119,7 +119,7 @@ export default function Reports() {
               key={t.key}
               onClick={() => setTab(t.key)}
               className={`px-4 py-2 rounded-xl text-sm font-semibold border-2 transition ${
-                tab === t.key ? 'bg-ink text-parchment border-ink' : 'border-parchment-line text-muted hover:border-ink'
+                tab === t.key ? 'bg-ink text-surface border-ink' : 'border-surface-line text-muted hover:border-ink'
               }`}
             >
               {t.label}
@@ -148,7 +148,7 @@ export default function Reports() {
                 {' '}بواسطة{' '}
                 <span className="text-inktext">{(r.thread_id ? r.forum_threads?.author_name : r.forum_replies?.author_name) || 'مستخدم محذوف'}</span>
               </p>
-              <p className="text-sm text-muted bg-parchment rounded-xl p-3">
+              <p className="text-sm text-muted bg-surface rounded-xl p-3">
                 {r.thread_id ? (r.forum_threads?.title || 'محتوى محذوف') : (r.forum_replies?.body || 'محتوى محذوف')}
               </p>
               <div className="flex gap-2 mt-3 flex-wrap">

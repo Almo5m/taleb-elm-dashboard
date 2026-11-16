@@ -3,6 +3,7 @@ import { Routes, Route, NavLink, useNavigate, useLocation, Navigate } from 'reac
 import { supabase } from './supabaseClient';
 import { ToastProvider, ConfirmProvider, ErrorBoundary } from './components/UI';
 import { AppUserProvider, useAppUser } from './context/AppUser';
+import BrandLogo from './components/BrandLogo';
 import Login from './pages/Login';
 import Overview from './pages/Overview';
 import Forum from './pages/Forum';
@@ -52,32 +53,32 @@ function Sidebar({ onLogout, mobileOpen, setMobileOpen, pendingReports }) {
   return (
     <>
       {mobileOpen && (
-        <div className="fixed inset-0 bg-black/40 z-30 md:hidden" onClick={() => setMobileOpen(false)} />
+        <div className="fixed inset-0 bg-ink/50 z-30 lg:hidden" onClick={() => setMobileOpen(false)} />
       )}
       <aside
-        className={`bg-ink text-parchment w-72 p-5 flex flex-col fixed md:sticky top-0 h-screen z-40 transition-transform duration-200 ${
-          mobileOpen ? 'translate-x-0' : 'translate-x-full md:translate-x-0'
+        className={`bg-ink text-surface w-72 lg:w-64 xl:w-72 p-4 lg:p-5 flex flex-col fixed lg:sticky top-0 h-screen max-h-[100dvh] z-40 transition-transform duration-200 ${
+          mobileOpen ? 'translate-x-0' : 'translate-x-full invisible lg:translate-x-0 lg:visible'
         }`}
       >
         <div className="flex items-center gap-3 mb-2 px-1">
-          <div className="w-11 h-11 rounded-xl bg-gold text-ink flex items-center justify-center font-messiri font-extrabold text-xl shrink-0">ط</div>
+          <BrandLogo size="md" />
           <div>
             <p className="font-messiri font-bold text-lg leading-tight">طالب علم</p>
-            <p className="text-xs text-parchment/50">لوحة التحكم</p>
+            <p className="text-xs text-surface/50">لوحة التحكم</p>
           </div>
         </div>
 
         {me && (
           <div className="mt-1 mb-2 px-1">
-            <span className={`stamp !rotate-0 !text-[10px] ${isAdmin ? 'text-gold' : 'text-parchment/70'}`}>
+            <span className={`stamp !rotate-0 !text-[10px] ${isAdmin ? 'text-accent' : 'text-surface/70'}`}>
               {isAdmin ? 'أدمن كامل' : 'مشرف'}
             </span>
           </div>
         )}
 
-        <div className="my-4 h-px bg-parchment/10" />
+        <div className="my-4 h-px bg-surface/10" />
 
-        <nav className="space-y-1 flex-1 overflow-y-auto">
+        <nav className="space-y-1 flex-1 overflow-y-auto overscroll-contain">
           {visibleItems.map((item) => (
             <NavLink
               key={item.to}
@@ -85,18 +86,18 @@ function Sidebar({ onLogout, mobileOpen, setMobileOpen, pendingReports }) {
               end={item.end}
               onClick={() => setMobileOpen(false)}
               className={({ isActive }) =>
-                `relative flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-semibold transition ${
+                `relative flex items-center gap-3 px-4 py-2 lg:py-2.5 rounded-xl text-sm font-semibold transition ${
                   isActive
-                    ? 'bg-parchment text-ink'
-                    : 'text-parchment/70 hover:bg-white/5 hover:text-parchment'
+                    ? 'bg-accent/15 text-white'
+                    : 'text-surface/70 hover:bg-white/5 hover:text-surface'
                 }`
               }
             >
               {({ isActive }) => (
                 <>
-                  {isActive && <span className="absolute -right-5 top-1/2 -translate-y-1/2 w-2.5 h-6 bg-gold rounded-l-full" />}
-                  <span className="w-5 text-center">{item.icon}</span>
-                  <span className="flex-1">{item.label}</span>
+                  {isActive && <span className="absolute -right-5 top-1/2 -translate-y-1/2 w-2.5 h-6 bg-accent rounded-l-full" />}
+                  <span className={`w-5 text-center ${isActive ? 'text-accent' : ''}`}>{item.icon}</span>
+                  <span className="flex-1 min-w-0">{item.label}</span>
                   {item.to === '/reports' && pendingReports > 0 && (
                     <span className="min-w-[20px] h-5 px-1.5 flex items-center justify-center rounded-full bg-coral text-white text-[11px] font-bold">
                       {pendingReports > 99 ? '99+' : pendingReports}
@@ -108,10 +109,10 @@ function Sidebar({ onLogout, mobileOpen, setMobileOpen, pendingReports }) {
           ))}
         </nav>
 
-        <div className="my-4 h-px bg-parchment/10" />
+        <div className="my-4 h-px bg-surface/10" />
         <button
           onClick={onLogout}
-          className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-semibold text-parchment/70 hover:bg-white/5 hover:text-parchment transition"
+          className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-semibold text-surface/70 hover:bg-white/5 hover:text-surface transition"
         >
           <span className="w-5 text-center">⏻</span> تسجيل خروج
         </button>
@@ -155,19 +156,19 @@ function Layout({ onLogout }) {
   }, []);
 
   return (
-    <div className="min-h-screen flex bg-parchment">
+    <div className="min-h-screen flex bg-surface">
       <Sidebar onLogout={onLogout} mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} pendingReports={pendingReports} />
 
       <div className="flex-1 min-w-0">
-        <header className="md:hidden sticky top-0 z-20 bg-parchment/90 backdrop-blur border-b border-parchment-line px-4 py-3 flex items-center justify-between">
+        <header className="lg:hidden sticky top-0 z-20 bg-surface/90 backdrop-blur border-b border-surface-line px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-ink text-gold flex items-center justify-center font-messiri font-bold">ط</div>
+            <BrandLogo size="sm" />
             <p className="font-messiri font-bold">لوحة التحكم</p>
           </div>
           <button onClick={() => setMobileOpen(true)} className="btn-ghost !px-3 !py-2 text-lg">☰</button>
         </header>
 
-        <main className="p-5 md:p-10 max-w-6xl mx-auto">
+        <main className="p-4 sm:p-6 lg:p-8 xl:p-10 max-w-6xl mx-auto w-full">
           <ErrorBoundary key={location.pathname}>
           <Routes>
             <Route path="/" element={<Overview />} />
@@ -220,7 +221,7 @@ function Root() {
 
   if (checking) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-parchment text-muted gap-3">
+      <div className="min-h-screen flex items-center justify-center bg-surface text-muted gap-3">
         <span className="w-4 h-4 rounded-full border-2 border-ink/20 border-t-ink animate-spin" />
         جارِ التحميل...
       </div>

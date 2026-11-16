@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { supabase } from '../supabaseClient';
+import BrandLogo from '../components/BrandLogo';
 
 export default function Login({ onLoggedIn }) {
   const [email, setEmail] = useState('');
@@ -34,19 +35,12 @@ export default function Login({ onLoggedIn }) {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-ink px-4 relative overflow-hidden">
-      {/* زخرفة خلفية هادئة توحي بدفتر/سجل */}
-      <div
-        className="absolute inset-0 opacity-[0.06] pointer-events-none"
-        style={{
-          backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 39px, #E3A72E 40px)',
-        }}
-      />
-      <div className="absolute -top-24 -left-24 w-72 h-72 rounded-full bg-gold/10 blur-3xl" />
-      <div className="absolute -bottom-24 -right-24 w-72 h-72 rounded-full bg-forest/20 blur-3xl" />
+      {/* توهج هادي واحد بلون الهوية، من غير أي زخرفة تانية */}
+      <div className="absolute -top-24 -left-24 w-72 h-72 rounded-full bg-accent/10 blur-3xl pointer-events-none" />
 
-      <form onSubmit={handleLogin} className="relative bg-parchment-card border border-parchment-line rounded-card p-8 w-full max-w-sm shadow-card animate-riseIn">
-        <div className="w-14 h-14 rounded-2xl bg-ink text-gold flex items-center justify-center mb-5 font-messiri font-extrabold text-2xl">ط</div>
-        <p className="font-messiri text-gold-dark text-sm font-semibold mb-1">طالب علم</p>
+      <form onSubmit={handleLogin} className="relative bg-surface-card border border-surface-line rounded-card p-8 w-full max-w-sm shadow-card animate-riseIn">
+        <BrandLogo size="lg" className="mb-5" />
+        <p className="font-messiri text-accent-dark text-sm font-semibold mb-1">طالب علم</p>
         <h1 className="text-xl font-bold mb-1 font-messiri">لوحة تحكم الإدارة</h1>
         <p className="text-sm text-muted mb-6">تسجيل دخول خاص بالإدارة فقط</p>
 

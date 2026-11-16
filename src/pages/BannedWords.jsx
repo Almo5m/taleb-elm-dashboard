@@ -37,7 +37,7 @@ function Gate({ onUnlock }) {
     <div>
       <PageHeader eyebrow="محتوى مقيّد" title="الكلمات الممنوعة" />
       <form onSubmit={submit} className="card p-6 max-w-sm">
-        <div className="w-12 h-12 rounded-full bg-ink text-gold flex items-center justify-center text-xl mb-4">🔒</div>
+        <div className="w-12 h-12 rounded-full bg-ink text-accent flex items-center justify-center text-xl mb-4">🔒</div>
         <p className="font-semibold mb-1">أكّد باسورد حسابك للمتابعة</p>
         <p className="text-sm text-muted mb-4">المحتوى حساس — محتاجين تأكيد إضافي إنك فعلاً صاحب الحساب</p>
         <input
@@ -137,7 +137,7 @@ function BannedWordsContent() {
         }
       />
 
-      <div className="card p-5 mb-8 max-w-xl bg-gold/10 border-gold/40">
+      <div className="card p-5 mb-8 max-w-xl bg-accent/10 border-accent/40">
         <p className="text-sm text-inktext leading-relaxed">
           أي سؤال أو رد يحتوي على كلمة من القائمة دي هيترفض تلقائيًا قبل ما ينشر، وهيظهر
           للطالب رسالة توضيحية بدل النشر. الفحص مش حساس لحالة الأحرف (كبير/صغير).
@@ -179,7 +179,7 @@ function BannedWordsContent() {
             return (
               <span
                 key={w.id}
-                className="inline-flex items-center gap-2 bg-parchment-card border border-parchment-line rounded-full px-3 py-1.5 text-sm"
+                className="inline-flex items-center gap-2 bg-surface-card border border-surface-line rounded-full px-3 py-1.5 text-sm"
               >
                 <span
                   onClick={() => toggleReveal(w.id)}

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
 import { PageHeader, Spinner, Stamp, EmptyState, useToast, useConfirm } from '../components/UI';
 
-const STATUS_TONE = { pending: 'gold', sent: 'forest', failed: 'coral' };
+const STATUS_TONE = { pending: 'amber', sent: 'forest', failed: 'coral' };
 const STATUS_LABEL = { pending: 'معلّق', sent: 'اتبعت', failed: 'فشل' };
 
 export default function Notifications() {
@@ -135,7 +135,7 @@ export default function Notifications() {
     <div>
       <PageHeader eyebrow="تواصل" title="الإشعارات" />
 
-      <div className="grid md:grid-cols-2 gap-5 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-6">
         <div className="card p-6">
           <p className="font-messiri font-bold mb-1">إشعار عام لكل المستخدمين</p>
           <p className="text-xs text-muted mb-4">هيوصل لكل جهاز مسجّل توكن</p>
@@ -169,12 +169,12 @@ export default function Notifications() {
               className="input-field"
             />
             {userResults.length > 0 && !selectedUser && (
-              <div className="absolute z-10 w-full bg-white border border-parchment-line rounded-lg mt-1 shadow-lg max-h-48 overflow-y-auto">
+              <div className="absolute z-10 w-full bg-white border border-surface-line rounded-lg mt-1 shadow-lg max-h-48 overflow-y-auto">
                 {userResults.map((u) => (
                   <button
                     key={u.id}
                     onClick={() => { setSelectedUser(u); setUserResults([]); }}
-                    className="w-full text-right px-3 py-2 hover:bg-parchment/60 text-sm"
+                    className="w-full text-right px-3 py-2 hover:bg-surface/60 text-sm"
                   >
                     <p className="font-semibold">{u.name}</p>
                     <p className="text-xs text-muted">{u.email}</p>
@@ -209,7 +209,7 @@ export default function Notifications() {
       ) : log.length === 0 ? (
         <EmptyState icon="◇" title="مفيش إشعارات اتبعتت لسه" />
       ) : (
-        <div className="card divide-y divide-parchment-line overflow-hidden">
+        <div className="card divide-y divide-surface-line overflow-hidden">
           {log.map((n) => (
             <div key={n.id} className="flex items-center gap-4 p-4">
               <div className="flex-1 min-w-0">

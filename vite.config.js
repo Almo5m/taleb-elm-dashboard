@@ -8,7 +8,7 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: 'auto',
-      includeAssets: ['favicon-32.png', 'apple-touch-icon.png'],
+      includeAssets: ['favicon.ico', 'favicon-16.png', 'favicon-32.png', 'apple-touch-icon.png', 'logo.png'],
       manifest: {
         name: 'لوحة تحكم طالب علم',
         short_name: 'طالب علم',
@@ -18,12 +18,13 @@ export default defineConfig({
         start_url: '/',
         scope: '/',
         display: 'standalone',
-        background_color: '#F7F2E6',
-        theme_color: '#132019',
+        // خلفية شاشة البداية نيلي زي الأيقونة، فالشعار بيظهر من غير حواف
+        background_color: '#0A2A5E',
+        theme_color: '#0A2A5E',
         icons: [
           { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
           { src: '/icon-512.png', sizes: '512x512', type: 'image/png' },
-          { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+          { src: '/maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
       },
       workbox: {

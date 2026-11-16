@@ -147,7 +147,7 @@ export function ToastProvider({ children }) {
           <button
             type="button"
             onClick={() => commit(itemsRef.current.filter((t) => t.variant !== 'error'))}
-            className="pointer-events-auto text-xs font-semibold bg-ink text-parchment rounded-full px-3 py-1 shadow-card"
+            className="pointer-events-auto text-xs font-semibold bg-ink text-surface rounded-full px-3 py-1 shadow-card"
           >
             إغلاق كل الأخطاء ({errorCount})
           </button>
@@ -166,7 +166,7 @@ function ToastItem({ toast: t, onClose }) {
   return (
     <div
       className={`pointer-events-auto animate-riseIn shadow-card border-2 rounded-xl px-4 py-2.5 text-sm font-semibold w-full max-w-xl select-text ${
-        isError ? 'bg-coral text-white border-coral' : 'bg-ink text-parchment border-ink'
+        isError ? 'bg-coral text-white border-coral' : 'bg-ink text-surface border-ink'
       }`}
     >
       <div className="flex items-start gap-2">
@@ -255,7 +255,7 @@ export class ErrorBoundary extends Component {
           <button type="button" className="btn-ghost !px-3 !py-1.5 text-sm" onClick={this.reset}>إعادة المحاولة</button>
           <button type="button" className="btn-ghost !px-3 !py-1.5 text-sm" onClick={() => window.location.reload()}>تحميل الصفحة تاني</button>
         </div>
-        <pre dir="ltr" className="text-[11px] whitespace-pre-wrap break-all text-left bg-parchment/60 rounded-lg p-3 max-h-72 overflow-y-auto select-text">
+        <pre dir="ltr" className="text-[11px] whitespace-pre-wrap break-all text-left bg-surface/60 rounded-lg p-3 max-h-72 overflow-y-auto select-text">
           {detailsText}
         </pre>
       </div>
@@ -316,7 +316,8 @@ export function Stamp({ children, tone = 'ink' }) {
     ink: 'text-ink',
     coral: 'text-coral',
     forest: 'text-forest',
-    gold: 'text-gold-dark',
+    accent: 'text-accent-dark',
+    amber: 'text-amber-dark',
   }[tone];
   return <span className={`stamp ${toneClass}`}>{children}</span>;
 }
@@ -326,7 +327,7 @@ export function PageHeader({ eyebrow, title, action }) {
     <div className="flex items-end justify-between gap-4 mb-7 flex-wrap">
       <div>
         {eyebrow && (
-          <p className="font-messiri text-gold-dark text-sm font-semibold tracking-wide mb-1">{eyebrow}</p>
+          <p className="font-messiri text-accent-dark text-sm font-semibold tracking-wide mb-1">{eyebrow}</p>
         )}
         <h2 className="font-messiri text-2xl md:text-3xl font-bold text-inktext">{title}</h2>
       </div>
@@ -338,7 +339,7 @@ export function PageHeader({ eyebrow, title, action }) {
 export function EmptyState({ icon = '◇', title, hint }) {
   return (
     <div className="card p-10 text-center">
-      <div className="w-12 h-12 mx-auto rounded-full bg-parchment flex items-center justify-center text-xl mb-3">{icon}</div>
+      <div className="w-12 h-12 mx-auto rounded-full bg-surface flex items-center justify-center text-xl mb-3">{icon}</div>
       <p className="font-semibold text-inktext">{title}</p>
       {hint && <p className="text-sm text-muted mt-1">{hint}</p>}
     </div>

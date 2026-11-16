@@ -42,7 +42,7 @@ function AiCapacity({ counts, daily, monthly, autoEnable }) {
   const tight = (d) => d !== null && d < 30;
 
   return (
-    <div className="bg-parchment rounded-xl px-3 py-2.5 mt-3 text-sm">
+    <div className="bg-surface rounded-xl px-3 py-2.5 mt-3 text-sm">
       <p className="text-xs text-muted font-semibold mb-1">حاسبة السعة (أسوأ حالة)</p>
       <p>
         المفعّل لهم دلوقتي <span className="font-semibold">{fmt(counts.enabled)}</span> من {fmt(counts.students ?? 0)} طالب.
@@ -565,7 +565,7 @@ export default function Settings() {
         />
 
         <p className="text-xs text-muted font-semibold mb-1">كده الطالب هيبعت:</p>
-        <div className="bg-parchment/60 rounded-lg p-3 text-sm whitespace-pre-wrap break-words" dir="auto" data-testid="share-preview">
+        <div className="bg-surface/60 rounded-lg p-3 text-sm whitespace-pre-wrap break-words" dir="auto" data-testid="share-preview">
           {share.message.trim() ? share.message.trim() : <span className="text-muted">(من غير رسالة)</span>}
           {'\n'}
           {validateHttpsUrl(share.url).ok ? share.url.trim() : <span className="text-muted">(الرابط لسه مش متحدد)</span>}
@@ -679,7 +679,7 @@ export default function Settings() {
         />
         <p className="text-xs text-muted mt-1 mb-4">بيسمح بتغيير المزوّد لاحقًا من غير تحديث تطبيق</p>
 
-        <div className="bg-parchment rounded-xl px-3 py-2.5">
+        <div className="bg-surface rounded-xl px-3 py-2.5">
           <p className="text-xs text-muted font-semibold mb-1">الاستهلاك الشهري الحالي</p>
           {aiUsage.loading ? (
             <p className="text-sm text-muted">جارِ التحميل...</p>
@@ -758,7 +758,7 @@ export default function Settings() {
         ) : (
           <div className="space-y-2 max-h-72 overflow-y-auto">
             {messages.map((m, i) => (
-              <div key={i} className="flex items-center justify-between gap-2 bg-parchment rounded-xl px-3 py-2">
+              <div key={i} className="flex items-center justify-between gap-2 bg-surface rounded-xl px-3 py-2">
                 <p className="text-sm">{m}</p>
                 <button onClick={() => removeMessage(i)} className="text-muted hover:text-coral font-bold shrink-0">×</button>
               </div>

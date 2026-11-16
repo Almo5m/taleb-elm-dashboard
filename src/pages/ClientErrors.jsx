@@ -22,7 +22,7 @@ import {
 const MESSAGE_PREVIEW = 140;
 const DETAIL_REPORTS = 20;
 
-const STATUS_TONE = { open: 'gold', fixed: 'forest', ignored: 'ink' };
+const STATUS_TONE = { open: 'amber', fixed: 'forest', ignored: 'ink' };
 
 const fullDate = (value) => (value ? new Date(value).toLocaleString('ar-EG') : '—');
 const preview = (text) => {
@@ -48,7 +48,7 @@ function DailyChart({ rows, metric }) {
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-40" role="img" aria-label="رسم بياني للأعطال آخر 30 يوم" dir="ltr">
         {[0, 0.5, 1].map((f) => (
           <g key={f}>
-            <line x1={P.l} x2={W - P.r} y1={y(max * f)} y2={y(max * f)} className="stroke-parchment-line" strokeWidth="1" />
+            <line x1={P.l} x2={W - P.r} y1={y(max * f)} y2={y(max * f)} className="stroke-surface-line" strokeWidth="1" />
             <text x={P.l - 4} y={y(max * f) + 3} textAnchor="end" className="fill-muted" fontSize="9">{Math.round(max * f)}</text>
           </g>
         ))}
@@ -144,7 +144,7 @@ function GroupDetail({ group: g, onChanged, onDeleted }) {
   const stackLines = (g.sample_stack || '').split('\n');
 
   return (
-    <div className="bg-parchment/60 rounded-lg p-4 mt-3 select-text space-y-4">
+    <div className="bg-surface/60 rounded-lg p-4 mt-3 select-text space-y-4">
       <div className="flex items-start justify-between gap-3">
         <p className="text-sm font-semibold break-words flex-1 min-w-0" dir="auto">{g.sample_message || '(بدون رسالة)'}</p>
         <CopyButton text={() => groupReportText(g, reports || [])} label="نسخ تقرير العطل" className="btn-primary !px-3 !py-1 text-xs shrink-0" />
@@ -187,7 +187,7 @@ function GroupDetail({ group: g, onChanged, onDeleted }) {
                   {reports.map((r) => {
                     const extra = describeExtra(r.extra);
                     return (
-                      <tr key={r.id} className="border-t border-parchment-line align-top">
+                      <tr key={r.id} className="border-t border-surface-line align-top">
                         <td className="py-1.5 pl-3 whitespace-nowrap" title={fullDate(r.created_at)}>{timeAgo(r.created_at)}</td>
                         <td className="py-1.5 pl-3 whitespace-nowrap" dir="ltr">{r.app_version || '—'}</td>
                         <td className="py-1.5 pl-3" dir="ltr">
@@ -205,7 +205,7 @@ function GroupDetail({ group: g, onChanged, onDeleted }) {
         )}
       </div>
 
-      <div className="border-t border-parchment-line pt-3">
+      <div className="border-t border-surface-line pt-3">
         <p className="text-sm font-semibold mb-2">حالة العطل</p>
         <div className="flex flex-wrap gap-4 mb-2 text-sm">
           {[['open', 'مفتوح'], ['fixed', 'اتصلح'], ['ignored', 'متجاهَل']].map(([key, label]) => (
@@ -363,7 +363,7 @@ export default function ClientErrors() {
           <p className="font-messiri font-bold">آخر 30 يوم</p>
           <div className="flex gap-1">
             {[['devices', 'أجهزة'], ['reports', 'تقارير']].map(([key, label]) => (
-              <button key={key} onClick={() => setMetric(key)} className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition ${metric === key ? 'bg-ink text-gold' : 'bg-parchment text-muted'}`}>{label}</button>
+              <button key={key} onClick={() => setMetric(key)} className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition ${metric === key ? 'bg-ink text-accent' : 'bg-surface text-muted'}`}>{label}</button>
             ))}
           </div>
         </div>
@@ -385,7 +385,7 @@ export default function ClientErrors() {
               <button
                 key={key}
                 onClick={() => { setTab(key); setOpenSig(null); }}
-                className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition ${tab === key ? 'bg-ink text-gold' : 'bg-parchment text-muted'}`}
+                className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition ${tab === key ? 'bg-ink text-accent' : 'bg-surface text-muted'}`}
               >
                 {label}
               </button>
@@ -423,7 +423,7 @@ export default function ClientErrors() {
       {visible.length === 0 ? (
         <EmptyState icon="✓" title={groups.length === 0 ? 'مفيش أعطال مسجّلة' : 'مفيش أعطال بالفلتر ده'} />
       ) : (
-        <div className="card divide-y divide-parchment-line overflow-hidden">
+        <div className="card divide-y divide-surface-line overflow-hidden">
           {visible.map((g) => (
             <div key={g.signature} className={`p-4 ${g.regressed ? 'border-r-4 border-coral bg-coral/5' : ''}`}>
               <div className="flex items-start gap-2">
@@ -444,7 +444,7 @@ export default function ClientErrors() {
                       </p>
                     </div>
                     <div className="shrink-0 flex flex-col items-end gap-1">
-                      <Stamp tone={g.devices > 1 ? 'coral' : 'gold'}>{g.devices} جهاز</Stamp>
+                      <Stamp tone={g.devices > 1 ? 'coral' : 'amber'}>{g.devices} جهاز</Stamp>
                       <span className="text-[11px] text-muted">{g.reports} تقرير</span>
                     </div>
                   </div>

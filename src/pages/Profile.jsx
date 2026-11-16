@@ -39,7 +39,7 @@ export default function Profile() {
       <div className="card p-5 mb-6 max-w-md">
         <div className="flex items-center gap-3 mb-1">
           <p className="font-semibold">{me?.name || 'بدون اسم'}</p>
-          <Stamp tone={me?.role === 'admin' ? 'gold' : 'ink'}>{me?.role === 'admin' ? 'أدمن كامل' : 'مشرف'}</Stamp>
+          <Stamp tone={me?.role === 'admin' ? 'accent' : 'ink'}>{me?.role === 'admin' ? 'أدمن كامل' : 'مشرف'}</Stamp>
         </div>
       </div>
 
