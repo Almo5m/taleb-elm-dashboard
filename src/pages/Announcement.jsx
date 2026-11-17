@@ -3,9 +3,11 @@ import { supabase } from '../supabaseClient';
 import { PageHeader, Spinner, EmptyState, useToast, useConfirm } from '../components/UI';
 import { useAppUser } from '../context/AppUser';
 import { logAction } from '../lib/audit';
+import { GRADES as OFFICIAL_GRADES, SYSTEMS as OFFICIAL_SYSTEMS } from '../lib/divisions';
 
-const GRADES = ['', 'الصف الأول الثانوي', 'الصف الثاني الثانوي', 'الصف الثالث الثانوي'];
-const SYSTEMS = ['', 'الثانوية العامة', 'البكالوريا المصرية'];
+// القوايم الرسمية من src/lib/divisions.js (والفاضي = كل الطلاب)
+const GRADES = ['', ...OFFICIAL_GRADES];
+const SYSTEMS = ['', ...OFFICIAL_SYSTEMS];
 
 export default function Announcement() {
   const [announcements, setAnnouncements] = useState([]);

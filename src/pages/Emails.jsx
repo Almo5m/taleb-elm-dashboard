@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
 import { PageHeader, Spinner, Stamp, EmptyState, useToast, useConfirm } from '../components/UI';
+import { GRADES } from '../lib/divisions';
 
-const GRADES = ['الصف الأول الثانوي', 'الصف الثاني الثانوي', 'الصف الثالث الثانوي'];
 const STATUS_TONE = { pending: 'amber', sent: 'forest', failed: 'coral' };
 const STATUS_LABEL = { pending: 'معلّق / مجدول', sent: 'اتبعت', failed: 'فشل' };
 const TARGET_LABEL = { all: 'كل الطلاب', grade: 'صف معيّن', single_user: 'طالب واحد' };

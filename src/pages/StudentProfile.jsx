@@ -4,9 +4,8 @@ import { supabase } from '../supabaseClient';
 import { PageHeader, Spinner, Stamp, CopyText, useToast, useConfirm } from '../components/UI';
 import { useAppUser } from '../context/AppUser';
 import { logAction } from '../lib/audit';
+import DivisionEditor from '../components/DivisionEditor';
 
-const GRADES = ['الصف الأول الثانوي', 'الصف الثاني الثانوي', 'الصف الثالث الثانوي'];
-const SYSTEMS = ['الثانوية العامة', 'البكالوريا المصرية'];
 const ROLES = [
   { value: 'student', label: 'طالب' },
   { value: 'moderator', label: 'مشرف' },
@@ -24,7 +23,7 @@ export default function StudentProfile() {
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
 
-  const [form, setForm] = useState({ name: '', system: '', grade: '', track: '' });
+  const [form, setForm] = useState({ name: '' });
   const [savingForm, setSavingForm] = useState(false);
 
   const [ai, setAi] = useState({ enabled: false, daily_limit_override: '' });
@@ -56,7 +55,7 @@ export default function StudentProfile() {
       return;
     }
     setProfile(p);
-    setForm({ name: p.name || '', system: p.system || '', grade: p.grade || '', track: p.track || '' });
+    setForm({ name: p.name || '' });
     setAi({ enabled: accessRow?.enabled || false, daily_limit_override: accessRow?.daily_limit_override ?? '' });
     setLoading(false);
     loadAiUsage();
@@ -90,10 +89,10 @@ export default function StudentProfile() {
 
   const saveForm = async () => {
     setSavingForm(true);
-    const { error } = await supabase.from('profiles').update(form).eq('id', id);
+    const { error } = await supabase.from('profiles').update({ name: form.name }).eq('id', id);
     setSavingForm(false);
     if (error) { toast('تعذّر حفظ التعديل', 'error', error); return; }
-    setProfile((prev) => ({ ...prev, ...form }));
+    setProfile((prev) => ({ ...prev, name: form.name }));
     audit('edit_profile', `تعديل بيانات ${form.name || id}`);
     toast('تم حفظ التعديلات');
   };
@@ -230,34 +229,16 @@ export default function StudentProfile() {
       {/* البيانات الأساسية */}
       <div className="card p-5 mb-6">
         <p className="font-messiri font-bold mb-4">البيانات الأساسية</p>
-        <div className="grid grid-cols-2 gap-3 mb-4">
-          <div>
-            <label className="text-xs text-muted font-semibold">الاسم</label>
-            <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="input-field mt-1" />
-          </div>
-          <div>
-            <label className="text-xs text-muted font-semibold">النظام</label>
-            <select value={form.system} onChange={(e) => setForm({ ...form, system: e.target.value, track: '' })} className="input-field mt-1">
-              <option value="">—</option>
-              {SYSTEMS.map((s) => <option key={s} value={s}>{s}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="text-xs text-muted font-semibold">الصف</label>
-            <select value={form.grade} onChange={(e) => setForm({ ...form, grade: e.target.value })} className="input-field mt-1">
-              <option value="">—</option>
-              {GRADES.map((g) => <option key={g} value={g}>{g}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="text-xs text-muted font-semibold">الشعبة/المسار</label>
-            <input value={form.track} onChange={(e) => setForm({ ...form, track: e.target.value })} className="input-field mt-1" placeholder="مثال: علمي علوم" />
-          </div>
+        <div className="mb-4 sm:max-w-md">
+          <label className="text-xs text-muted font-semibold" htmlFor="profile-name">الاسم</label>
+          <input id="profile-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="input-field mt-1" />
         </div>
         <button onClick={saveForm} disabled={savingForm} className="btn-primary">
-          {savingForm ? 'جارِ الحفظ...' : 'حفظ البيانات'}
+          {savingForm ? 'جارِ الحفظ...' : 'حفظ الاسم'}
         </button>
       </div>
+
+      <DivisionEditor key={`${profile.system}|${profile.grade}|${profile.track}`} profile={profile} onSaved={(fields) => setProfile((prev) => ({ ...prev, ...fields }))} />
 
       {/* المساعد الذكي */}
       <div className="card p-5 mb-6">

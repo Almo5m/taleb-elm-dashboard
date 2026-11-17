@@ -6,8 +6,10 @@ import { useAppUser } from '../context/AppUser';
 import { logAction } from '../lib/audit';
 import { exportToCsv } from '../lib/csv';
 import { fetchAll, inChunks } from '../lib/fetchAll';
+import { GRADES, divisionStatus, isPendingTrack } from '../lib/divisions';
+import PromotionPanel from '../components/PromotionPanel';
+import DistributionCard from '../components/DistributionCard';
 
-const GRADES = ['الصف الأول الثانوي', 'الصف الثاني الثانوي', 'الصف الثالث الثانوي'];
 
 export default function Accounts() {
   const [profiles, setProfiles] = useState([]);
@@ -19,6 +21,8 @@ export default function Accounts() {
   const [aiAccess, setAiAccess] = useState({});
   const [bulkBusy, setBulkBusy] = useState(false);
   const [joinedFilter, setJoinedFilter] = useState('الكل');
+  const [divisionFilter, setDivisionFilter] = useState('الكل'); // الكل | pending | invalid
+  const [promotionOpen, setPromotionOpen] = useState(false);
   const [selected, setSelected] = useState(new Set());
   const toast = useToast();
   const confirm = useConfirm();
@@ -70,9 +74,14 @@ export default function Accounts() {
         (aiFilter === 'معطّل' && !aiEnabled);
       const joinedDays = joinedFilter === 'آخر 24 ساعة' ? 1 : joinedFilter === 'آخر 7 أيام' ? 7 : null;
       const matchesJoined = joinedDays === null || Date.now() - new Date(p.created_at).getTime() <= joinedDays * 86400000;
-      return matchesSearch && matchesGrade && matchesStatus && matchesAi && matchesJoined;
+      const isStudent = (p.role || 'student') === 'student';
+      const matchesDivision =
+        divisionFilter === 'الكل' ||
+        (divisionFilter === 'pending' && isStudent && isPendingTrack(p)) ||
+        (divisionFilter === 'invalid' && isStudent && divisionStatus(p) === 'invalid');
+      return matchesSearch && matchesGrade && matchesStatus && matchesAi && matchesJoined && matchesDivision;
     });
-  }, [profiles, search, gradeFilter, statusFilter, aiFilter, joinedFilter, aiAccess]);
+  }, [profiles, search, gradeFilter, statusFilter, aiFilter, joinedFilter, divisionFilter, aiAccess]);
 
   const toggleSelect = (id) => {
     setSelected((prev) => {
@@ -137,6 +146,15 @@ export default function Accounts() {
     clearSelection();
   };
 
+  const pendingTrackCount = useMemo(
+    () => profiles.filter((p) => (p.role || 'student') === 'student' && isPendingTrack(p)).length,
+    [profiles]
+  );
+  const invalidDivisionCount = useMemo(
+    () => profiles.filter((p) => (p.role || 'student') === 'student' && divisionStatus(p) === 'invalid').length,
+    [profiles]
+  );
+
   const studentsWithoutAi = useMemo(
     () => profiles.filter((p) => p.role === 'student' && !p.banned && !getAiAccess(p.id).enabled),
     [profiles, aiAccess]
@@ -168,8 +186,46 @@ export default function Accounts() {
       <PageHeader
         eyebrow={`${profiles.length} حساب مسجّل · المساعد الذكي مفعّل لـ ${aiEnabledCount}`}
         title="إدارة الحسابات"
-        action={<button onClick={exportCsv} className="btn-ghost">تصدير CSV ⭳</button>}
+        action={
+          <div className="flex gap-2 flex-wrap">
+            <button onClick={() => setPromotionOpen((v) => !v)} className="btn-ghost">نقل الصفوف (ترقية)</button>
+            <button onClick={exportCsv} className="btn-ghost">تصدير CSV ⭳</button>
+          </div>
+        }
       />
+
+      {promotionOpen && (
+        <PromotionPanel
+          onClose={() => setPromotionOpen(false)}
+          onDone={() => { setPromotionOpen(false); load(); }}
+        />
+      )}
+
+      {!loading && <DistributionCard profiles={profiles} onShowInvalid={() => setDivisionFilter('invalid')} />}
+
+      {!loading && (pendingTrackCount > 0 || invalidDivisionCount > 0 || divisionFilter !== 'الكل') && (
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+          {pendingTrackCount > 0 && (
+            <button
+              onClick={() => setDivisionFilter(divisionFilter === 'pending' ? 'الكل' : 'pending')}
+              className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition ${divisionFilter === 'pending' ? 'bg-ink text-accent' : 'bg-white border border-surface-line text-muted'}`}
+            >
+              في انتظار اختيار الشعبة: {pendingTrackCount}
+            </button>
+          )}
+          {invalidDivisionCount > 0 && (
+            <button
+              onClick={() => setDivisionFilter(divisionFilter === 'invalid' ? 'الكل' : 'invalid')}
+              className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition ${divisionFilter === 'invalid' ? 'bg-coral text-white' : 'bg-white border border-coral/40 text-coral-dark'}`}
+            >
+              تقسيم غير مطابق: {invalidDivisionCount}
+            </button>
+          )}
+          {divisionFilter !== 'الكل' && (
+            <button onClick={() => setDivisionFilter('الكل')} className="text-xs text-muted underline underline-offset-4">إلغاء الفلتر</button>
+          )}
+        </div>
+      )}
 
       <div className="card p-4 mb-4 flex flex-col md:flex-row md:flex-wrap gap-3">
         <input

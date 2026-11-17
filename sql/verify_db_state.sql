@@ -42,6 +42,11 @@ from (
          to_regprocedure('public.ai_record_usage(uuid,date,text)') is not null
   union all select 'view: ' || v || ' (client_errors_v2)', to_regclass('public.' || v) is not null
          from unnest(array['client_error_groups','client_error_daily']) as v
+  union all select 'function: admin_promote_students (division_promotion)',
+         to_regprocedure('public.admin_promote_students(text,text,integer)') is not null
+  union all select 'table: ' || t || ' (catalog_lessons، من كلود التطبيق)', to_regclass('public.' || t) is not null
+         from unnest(array['catalog_subjects','catalog_lessons']) as t
+  union all select 'view: catalog_subject_stats (catalog_admin)', to_regclass('public.catalog_subject_stats') is not null
   union all select 'trigger: trg_auto_enable_ai_new_profile (ai_auto_enable، اختياري)',
          exists(select 1 from pg_trigger where tgname = 'trg_auto_enable_ai_new_profile')
   union all select 'user_stats: authenticated مالوش TRUNCATE',
