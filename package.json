@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:lib": "node --test \"tests/lib/*.test.mjs\"",
+    "test:edge": "deno test --no-lock --allow-read --allow-env --import-map=tests/edge/import_map.json tests/edge/"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",

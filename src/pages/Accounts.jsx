@@ -19,6 +19,7 @@ export default function Accounts() {
   const [statusFilter, setStatusFilter] = useState('الكل');
   const [aiFilter, setAiFilter] = useState('الكل');
   const [aiAccess, setAiAccess] = useState({});
+  const [planByUser, setPlanByUser] = useState({}); // user_id -> اسم الخطة الفعّالة
   const [bulkBusy, setBulkBusy] = useState(false);
   const [joinedFilter, setJoinedFilter] = useState('الكل');
   const [divisionFilter, setDivisionFilter] = useState('الكل'); // الكل | pending | invalid
@@ -35,13 +36,20 @@ export default function Accounts() {
   const load = async () => {
     setLoading(true);
     // fetchAll: Supabase بيقطع أي استعلام عند 1000 صف من غير تنبيه، وده كان هيخفي الطلاب الزيادة
-    const [{ data, error }, { data: aiRows, error: aiError }] = await Promise.all([
+    const [{ data, error }, { data: aiRows, error: aiError }, planRes] = await Promise.all([
       fetchAll(() => supabase.from('profiles').select('*').order('created_at', { ascending: false }).order('id')),
       fetchAll(() => supabase.from('ai_access').select('*').order('user_id')),
+      // الخطط اختيارية: لو الجدول لسه مااتعملش الشارة مش بتظهر وخلاص
+      fetchAll(() => supabase.from('ai_subscriptions_view').select('id, user_id, plan_name').eq('effective_status', 'active').order('id')),
     ]);
     if (error) toast('تعذّر تحميل الحسابات', 'error', error);
     if (aiError) toast('تعذّر تحميل حالة المساعد الذكي — الأرقام المعروضة ممكن تكون ناقصة', 'error', aiError);
     setProfiles(data || []);
+    if (!planRes.error) {
+      const plans = {};
+      planRes.data.forEach((r) => { plans[r.user_id] = r.plan_name; });
+      setPlanByUser(plans);
+    }
     if (aiRows) {
       const map = {};
       aiRows.forEach((r) => { map[r.user_id] = { enabled: r.enabled, daily_limit_override: r.daily_limit_override }; });
@@ -322,6 +330,7 @@ export default function Accounts() {
                     {p.role === 'moderator' && <Stamp tone="ink">مشرف</Stamp>}
                     {p.banned && <Stamp tone="coral">محظور</Stamp>}
                     {getAiAccess(p.id).enabled && <Stamp tone="forest">AI مفعّل</Stamp>}
+                    {planByUser[p.id] && <Stamp tone="accent">خطة {planByUser[p.id]}</Stamp>}
                   </p>
                   <p className="text-xs text-muted truncate">
                     {p.email || '—'} · {p.system || '—'} • {p.grade || '—'} {p.track ? `• ${p.track}` : ''}

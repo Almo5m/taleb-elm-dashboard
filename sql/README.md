@@ -35,6 +35,8 @@
 | `supabase_catalog_lessons.sql` | جدولين `catalog_subjects` (183 مادة في 20 توليفة) و`catalog_lessons`. **من كلود التطبيق** | لسه مااتشغّلش |
 | `supabase_division_promotion.sql` | الترقية الجماعية: معاينة + نسخة احتياطية + تنفيذ في معاملة واحدة | جاهز، لسه مااتشغّلش (بعد التلاتة اللي فوق) |
 | `supabase_catalog_admin.sql` | view عدّادات الدروس لكل مادة (لصفحة دروس المنهج) | جاهز، لسه مااتشغّلش (بعد `supabase_catalog_lessons.sql`) |
+| `supabase_ai_model_state.sql` | حالة موديلات بو (أنهي موديل خلصت حصته ولحد إمتى). بتستخدمها دالة `ai-assistant` الجديدة وكارت "حالة موديلات بو" في الإعدادات. شغّلها قبل نشر الدالة | جاهز، لسه مااتشغّلش (**من كلود التطبيق**) |
+| `supabase_ai_plans.sql` | خطط واشتراكات بو + سجل التكلفة (`ai_plans`, `ai_subscriptions`, `ai_usage_events` + views للوحة). شغّلها بعد `supabase_ai_model_state.sql` | جاهز، لسه مااتشغّلش (**من كلود التطبيق**) |
 | `supabase_emails.sql` | الإيميلات | مؤجل (محتاج دومين خاص) |
 
 ملفات الأصل (`supabase_setup/forum/admin/moderation/features.sql`) في ريبو التطبيق مش هنا.

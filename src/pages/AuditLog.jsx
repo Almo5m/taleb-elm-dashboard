@@ -32,6 +32,16 @@ const ACTION_TONE = {
   bulk_ai_disable: 'coral',
   ai_disable: 'coral',
   ai_limit_override: 'amber',
+  ai_plan_add: 'forest',
+  ai_plan_edit: 'amber',
+  ai_plan_toggle: 'amber',
+  ai_plan_reorder: 'ink',
+  ai_plan_delete: 'coral',
+  ai_sub_activate: 'forest',
+  ai_sub_renew: 'forest',
+  ai_sub_cancel: 'coral',
+  ai_pricing_update: 'amber',
+  ai_models_update: 'amber',
 };
 
 const ACTION_LABEL = {
@@ -63,6 +73,16 @@ const ACTION_LABEL = {
   bulk_ai_disable: 'إيقاف جماعي للمساعد الذكي',
   ai_disable: 'إيقاف المساعد الذكي',
   ai_limit_override: 'تعديل حد المساعد الذكي',
+  ai_plan_add: 'إضافة خطة بو',
+  ai_plan_edit: 'تعديل خطة بو',
+  ai_plan_toggle: 'إظهار/إخفاء خطة بو',
+  ai_plan_reorder: 'ترتيب خطط بو',
+  ai_plan_delete: 'مسح خطة بو',
+  ai_sub_activate: 'تفعيل اشتراك بو',
+  ai_sub_renew: 'تجديد اشتراك بو',
+  ai_sub_cancel: 'إلغاء اشتراك بو',
+  ai_pricing_update: 'تعديل أسعار الموديلات',
+  ai_models_update: 'تعديل موديلات بو',
 };
 
 export default function AuditLog() {

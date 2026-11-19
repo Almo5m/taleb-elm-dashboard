@@ -5,6 +5,7 @@ import { PageHeader, Spinner, Stamp, CopyText, useToast, useConfirm } from '../c
 import { useAppUser } from '../context/AppUser';
 import { logAction } from '../lib/audit';
 import DivisionEditor from '../components/DivisionEditor';
+import StudentPlanInfo from '../components/ai/StudentPlanInfo';
 
 const ROLES = [
   { value: 'student', label: 'طالب' },
@@ -244,6 +245,8 @@ export default function StudentProfile() {
       <div className="card p-5 mb-6">
         <p className="font-messiri font-bold mb-1">المساعد الذكي</p>
         <p className="text-xs text-muted mb-4">التحكم في وصول هذا الطالب للمساعد الذكي والاطّلاع على استهلاكه</p>
+
+        <StudentPlanInfo userId={id} />
 
         <label className="flex items-center gap-3 mb-4 cursor-pointer">
           <input

@@ -5,23 +5,56 @@
 // بينادي الدالة دي بس، مش بيكلم Gemini مباشرة أبدًا — عشان المفتاح مايتحطش
 // جوه كود التطبيق (قابل للاستخراج من أي APK بفك الضغط).
 //
-// ⚠️⚠️ مهم جدًا: أي تعديل في الملف ده (زي تغيير SYSTEM_PROMPT أو أي منطق)
-// لازم يترفع تاني يدويًا بالأمر تحت — مش زي كود Flutter اللي بيتحدث لحظة ما
-// تثبت APK جديد. لو نسيت الخطوة دي، التطبيق هيفضل يكلم النسخة القديمة
-// المنشورة فعليًا على سيرفرات Supabase، حتى لو الملف عندك محدّث تمامًا:
+// ⚠️⚠️ مهم جدًا: أي تعديل في الملفات دي (index.ts أو ai-core.ts) لازم يترفع تاني
+// يدويًا بالأمر تحت — مش زي كود Flutter اللي بيتحدث لحظة ما تثبت APK جديد:
 //
 //   supabase functions deploy ai-assistant
-//   supabase secrets set GEMINI_API_KEY=your_key_here   (مرة واحدة بس، مش لازم كل تحديث)
+//   supabase secrets set GEMINI_API_KEY=your_key_here   (مرة واحدة بس)
 //
-// (SUPABASE_URL و SUPABASE_SERVICE_ROLE_KEY متاحين تلقائيًا لأي Edge Function
-// من غير ما تحطهم يدويًا)
+// (SUPABASE_URL و SUPABASE_SERVICE_ROLE_KEY متاحين تلقائيًا لأي Edge Function)
+//
+// شغّل sql/supabase_ai_model_state.sql قبل النشر (بس لو لسه ماتشغّلش الدالة بتشتغل
+// عادي من غيره، من غير حفظ حالة الموديلات الخالصة).
+//
+// الطلبات اللي بتقبلها الدالة (POST):
+//   message + history   → رد من بو، أو blocked:true مع code و reason
+//   action = "status"   → حالة الطالب: مفعّل؟ باقي كام رسالة؟ (مبتستهلكش رسالة)
+//
+// المنطق الصافي (اليوم بتوقيت القاهرة، تصنيف أخطاء Gemini، سلسلة الموديلات، الـ history، الحالة)
+// في ai-core.ts، واختباراته في tests/edge/.
 // ============================================
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import {
+  availableModels,
+  blockedBody,
+  buildContents,
+  buildModelChain,
+  CAIRO_TZ,
+  cairoDayKey,
+  cairoMonthKey,
+  classifyGeminiFailure,
+  computeStatus,
+  cooldownUntil,
+  effectiveDailyLimit,
+  extractUsage,
+  isQuotaKind,
+  mergeModelChains,
+  pickActivePlan,
+  sanitizeHistory,
+  type ActivePlan,
+  type GeminiFailure,
+} from './ai-core.ts';
 
 const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY')!;
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+
+type Admin = ReturnType<typeof createClient>;
+
+// أقصى مدة لمحاولة واحدة، وأقصى مدة لكل المحاولات مع بعض (التطبيق بيستنى ٩٠ ثانية)
+const ATTEMPT_TIMEOUT_MS = Number(Deno.env.get('AI_ATTEMPT_TIMEOUT_MS')) || 22_000; // المتغير للاختبارات بس
+const TOTAL_BUDGET_MS = 60_000;
 
 // معلومات عامة عن التطبيق + دور "بو" كمساعد دراسي شامل — مش محتاج RAG أو
 // بحث، نص ثابت كفاية
@@ -69,11 +102,31 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
-// تنبيه تليجرام لو Gemini بيفشل — بـ debounce 10 دقايق عشان لو حصل outage
-// مايغرقش تليجرام برسايل متكررة على كل طلب فاشل لوحده. الأسرار
-// TELEGRAM_BOT_TOKEN و TELEGRAM_CHAT_ID متاحة هنا تلقائيًا لإن أسرار
-// Supabase مشتركة على مستوى المشروع كله، مش لازم تتحط تاني لكل فنكشن.
-async function alertGeminiFailure(admin: ReturnType<typeof createClient>, detail: string) {
+/** أي رسالة تليجرام بتعدّي من هنا. عمرها ما بترمي استثناء. */
+async function sendTelegram(text: string) {
+  try {
+    const token = Deno.env.get('TELEGRAM_BOT_TOKEN');
+    const chatId = Deno.env.get('TELEGRAM_CHAT_ID');
+    if (!token || !chatId) return;
+    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text }),
+    });
+  } catch (e) {
+    console.error('sendTelegram error:', e);
+  }
+}
+
+function fmtCairo(d: Date): string {
+  return new Intl.DateTimeFormat('ar-EG', {
+    timeZone: CAIRO_TZ, day: 'numeric', month: 'numeric', hour: 'numeric', minute: '2-digit',
+  }).format(d);
+}
+
+// تنبيه تليجرام لو Gemini بيفشل لأسباب غير الحصة (ضغط، مفتاح، مهلة) — بـ debounce 10 دقايق
+// عشان لو حصل outage مايغرقش تليجرام برسايل متكررة على كل طلب فاشل لوحده.
+async function alertGeminiFailure(admin: Admin, detail: string) {
   try {
     const { data: state } = await admin
       .from('ai_error_alert_state')
@@ -85,18 +138,123 @@ async function alertGeminiFailure(admin: ReturnType<typeof createClient>, detail
     if (Date.now() - lastAlertMs < 10 * 60 * 1000) return; // اتبعت تنبيه من أقل من 10 دقايق
 
     await admin.from('ai_error_alert_state').update({ last_alert_at: new Date().toISOString() }).eq('id', true);
-
-    const token = Deno.env.get('TELEGRAM_BOT_TOKEN');
-    const chatId = Deno.env.get('TELEGRAM_CHAT_ID');
-    if (!token || !chatId) return;
-
-    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: chatId, text: `⚠️ المساعد الذكي (بو) بيفشل في الرد\n${detail}` }),
-    });
+    await sendTelegram(`⚠️ المساعد الذكي (بو) بيفشل في الرد\n${detail}`);
   } catch (e) {
     console.error('alertGeminiFailure error:', e);
+  }
+}
+
+// ---------- حالة الموديلات (أنهي موديل خلصت حصته ولحد إمتى) ----------
+
+interface Cooldown { until: Date; reason: string }
+
+async function loadCooldowns(admin: Admin, now: Date): Promise<Map<string, Cooldown>> {
+  const map = new Map<string, Cooldown>();
+  try {
+    const { data, error } = await admin
+      .from('ai_model_state')
+      .select('model, exhausted_until, reason')
+      .gt('exhausted_until', now.toISOString());
+    if (error) {
+      console.error('ai_model_state read failed:', error.message);
+      return map; // الجدول لسه ماتعملش؟ نكمّل من غير حالة محفوظة
+    }
+    for (const r of data ?? []) {
+      if (String(r.model).startsWith('__') || !r.exhausted_until) continue;
+      map.set(r.model, { until: new Date(r.exhausted_until), reason: r.reason ?? '' });
+    }
+  } catch (e) {
+    console.error('loadCooldowns error:', e);
+  }
+  return map;
+}
+
+/** بيسجّل إن الموديل ده فشل ولحد إمتى نتخطّاه، وبيبعت تنبيه لما حصته اليومية تخلص لأول مرة */
+async function markModelFailure(admin: Admin, cooldowns: Map<string, Cooldown>, model: string, failure: GeminiFailure, now: Date) {
+  const until = cooldownUntil(failure, now);
+  if (!until) return;
+  cooldowns.set(model, { until, reason: failure.kind });
+  try {
+    const { data: prev } = await admin.from('ai_model_state').select('exhausted_until').eq('model', model).maybeSingle();
+    const wasActive = !!prev?.exhausted_until && new Date(prev.exhausted_until).getTime() > now.getTime();
+    await admin.from('ai_model_state').upsert(
+      { model, exhausted_until: until.toISOString(), reason: failure.kind, detail: failure.detail.slice(0, 300), updated_at: now.toISOString() },
+      { onConflict: 'model' },
+    );
+    if (failure.kind === 'quota_daily' && !wasActive) {
+      await sendTelegram(`⚠️ حصة الموديل ${model} خلصت (حد يومي). هيرجع ${fmtCairo(until)} بتوقيت القاهرة.\nبو بيكمّل على الموديل التالي في السلسلة.`);
+    }
+  } catch (e) {
+    console.error('markModelFailure error:', e);
+  }
+}
+
+/** كل الموديلات خلصت: تنبيه واحد كل ٦ ساعات بالكتير */
+async function alertAllExhausted(admin: Admin, retryAt: Date | null) {
+  try {
+    const { data } = await admin.from('ai_model_state').select('alerted_at').eq('model', '__all_exhausted__').maybeSingle();
+    const last = data?.alerted_at ? new Date(data.alerted_at).getTime() : 0;
+    if (Date.now() - last < 6 * 3600 * 1000) return;
+    await admin.from('ai_model_state').upsert(
+      { model: '__all_exhausted__', reason: 'all_exhausted', alerted_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+      { onConflict: 'model' },
+    );
+    await sendTelegram(
+      `🛑 كل موديلات بو خلصت حصتها، والطلاب بيشوفوا "رصيد بو خلص".${retryAt ? `\nأقرب رجوع: ${fmtCairo(retryAt)} بتوقيت القاهرة.` : ''}\nضيف موديل بديل من الإعدادات ← المساعد الذكي، أو فعّل الدفع في جوجل لو المشكلة بتتكرر.`,
+    );
+  } catch (e) {
+    console.error('alertAllExhausted error:', e);
+  }
+}
+
+// ---------- مكالمة Gemini ----------
+
+type GeminiResult =
+  | { ok: true; text: string; finishReason?: string; usage: { input: number; output: number } }
+  | { ok: false; failure: GeminiFailure };
+
+async function callGemini(model: string, contents: unknown, timeoutMs: number): Promise<GeminiResult> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+      method: 'POST',
+      // المفتاح في الهيدر مش في الرابط (الروابط بتتسجّل أحيانًا)
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': GEMINI_API_KEY },
+      body: JSON.stringify({
+        system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
+        contents,
+        generationConfig: { maxOutputTokens: 4096, temperature: 0.6 },
+      }),
+      signal: ctrl.signal,
+    });
+
+    if (!res.ok) {
+      // بنسجّل نص الخطأ الفعلي من Gemini (مش بس status code) — يظهر في Supabase Dashboard →
+      // Edge Functions → ai-assistant → Logs، عشان أي فشل يبان سببه واضح بدل التخمين
+      const errBody = await res.text();
+      console.error('Gemini API error:', model, res.status, errBody);
+      return { ok: false, failure: classifyGeminiFailure(res.status, errBody) };
+    }
+
+    const data = await res.json();
+    // بنجمع كل الـ parts مع بعض (مش parts[0] بس) — بعض الردود بتيجي مقسّمة على أكتر من part
+    const parts = data?.candidates?.[0]?.content?.parts as { text?: string }[] | undefined;
+    const text = parts?.map((p) => p.text ?? '').join('').trim() ?? '';
+    const finishReason = data?.candidates?.[0]?.finishReason as string | undefined;
+    console.log('Gemini finishReason:', finishReason, '| model:', model, '| reply length:', text.length);
+
+    if (!text) {
+      console.error('Gemini returned empty reply. Raw response:', JSON.stringify(data));
+      return { ok: false, failure: { kind: 'other', detail: `empty reply from ${model}` } };
+    }
+    return { ok: true, text, finishReason, usage: extractUsage(data) };
+  } catch (e) {
+    const aborted = (e as Error)?.name === 'AbortError';
+    console.error('Unexpected error calling Gemini:', model, e);
+    return { ok: false, failure: classifyGeminiFailure(0, aborted ? 'timeout' : String(e)) };
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -174,6 +332,82 @@ async function alertUsageThresholds(
   }
 }
 
+// ---------- الخطة الفعّالة للطالب (لو SQL الخطط لسه ماتشغّلش: مفيش خطة والباقي شغال عادي) ----------
+
+async function loadActivePlan(admin: Admin, userId: string, now: Date): Promise<ActivePlan | null> {
+  try {
+    const { data: subs, error } = await admin
+      .from('ai_subscriptions')
+      .select('plan_id, status, starts_at, ends_at')
+      .eq('user_id', userId)
+      .eq('status', 'active');
+    if (error || !subs?.length) return null;
+    const ids = [...new Set(subs.map((r: { plan_id: number }) => r.plan_id))];
+    // بنقرا الخطة حتى لو اتخفّت من قايمة الطلاب (is_active=false): المشترك الحالي مبيتأثرش
+    const { data: plans } = await admin.from('ai_plans').select('id, name, daily_limit, models').in('id', ids);
+    return pickActivePlan(subs, plans ?? [], now);
+  } catch (e) {
+    console.error('loadActivePlan error:', e);
+    return null;
+  }
+}
+
+// ---------- الحالة الكاملة للطالب (مشتركة بين الرد والـ status) ----------
+
+async function loadState(admin: Admin, userId: string, now: Date) {
+  const today = cairoDayKey(now); // يوم الطالب بيتجدد منتصف الليل بتوقيت القاهرة
+  const monthKey = cairoMonthKey(now);
+
+  const { data: settingsRow } = await admin.from('app_settings').select('value').eq('key', 'ai_assistant').maybeSingle();
+  const settings = (settingsRow?.value ?? null) as {
+    enabled?: boolean;
+    daily_limit_per_user?: number;
+    monthly_limit_global?: number;
+    model?: string;
+    fallback_models?: string[];
+  } | null;
+
+  const { data: access } = await admin.from('ai_access').select('enabled, daily_limit_override').eq('user_id', userId).maybeSingle();
+  const plan = await loadActivePlan(admin, userId, now);
+
+  const dailyLimit = effectiveDailyLimit({
+    override: access?.daily_limit_override,
+    planLimit: plan?.dailyLimit ?? null,
+    defaultLimit: settings?.daily_limit_per_user ?? 20,
+  });
+  const { data: dailyRow } = await admin
+    .from('ai_usage_daily')
+    .select('message_count')
+    .eq('user_id', userId)
+    .eq('usage_date', today)
+    .maybeSingle();
+  const dailyCount = dailyRow?.message_count ?? 0;
+
+  // السقف الشهري الإجمالي للتطبيق كله (حماية أخيرة للميزانية مهما كانت حدود الأفراد)
+  const monthlyLimit = settings?.monthly_limit_global ?? 3000;
+  const { data: monthlyRow } = await admin.from('ai_usage_monthly').select('message_count').eq('month', monthKey).maybeSingle();
+  const monthlyCount = monthlyRow?.message_count ?? 0;
+
+  const chain = mergeModelChains(plan?.models ?? [], buildModelChain(settings?.model, settings?.fallback_models));
+  const cooldowns = await loadCooldowns(admin, now);
+  const models = availableModels(chain, cooldowns, now);
+
+  const status = computeStatus({
+    globalEnabled: !!settings?.enabled,
+    userEnabled: !!access?.enabled || !!plan, // الاشتراك الفعّال بيفعّل بو حتى لو مفيش ai_access
+    dailyLimit,
+    usedToday: dailyCount,
+    monthlyLimit,
+    monthlyCount,
+    modelsAvailable: models.available.length > 0,
+    modelsRetryAt: models.earliestRetry,
+    now,
+    plan,
+  });
+
+  return { status, chain, cooldowns, available: models.available, dailyLimit, dailyCount, monthlyLimit, monthlyCount, today, monthKey, plan };
+}
+
 Deno.serve(async (req) => {
   if (req.method !== 'POST') {
     return jsonResponse({ error: 'method not allowed' }, 405);
@@ -196,13 +430,23 @@ Deno.serve(async (req) => {
   }
   const userId = userData.user.id;
 
+  let body: { message?: string; history?: unknown; action?: string };
+  try {
+    body = await req.json();
+  } catch {
+    return jsonResponse({ error: 'invalid body' }, 400);
+  }
+
+  // طلب "حالة" (التطبيق بيسأله أول ما الشات يفتح): مبيستهلكش رسالة ومبيعدّيش على حد المعدّل
+  if (body.action === 'status') {
+    const s = await loadState(admin, userId, new Date());
+    return jsonResponse({ ok: true, status: s.status });
+  }
+
   // Rate limiting بطبقتين:
-  // 1) فاصل أدنى 3 ثواني بين كل رسالة والتانية (يمنع bug في التطبيق أو
-  //    ضغط متكرر سريع)
-  // 2) نافذة حقيقية 60 ثانية بحد أقصى 15 رسالة — بتمنع طالب من "التحايل"
-  //    على فاصل الـ 3 ثواني ببعت رسالة كل 3.1 ثانية بالظبط ويستهلك ميزانية
-  //    كبيرة في وقت قصير؛ النافذة بتتصفّر تلقائيًا كل 60 ثانية من أول رسالة
-  //    فيها
+  // 1) فاصل أدنى 3 ثواني بين كل رسالة والتانية (يمنع bug في التطبيق أو ضغط متكرر سريع)
+  // 2) نافذة حقيقية 60 ثانية بحد أقصى 15 رسالة — بتمنع طالب من "التحايل" على فاصل
+  //    الـ 3 ثواني؛ النافذة بتتصفّر تلقائيًا كل 60 ثانية من أول رسالة فيها
   const MAX_PER_WINDOW = 15;
   const WINDOW_MS = 60_000;
 
@@ -215,7 +459,7 @@ Deno.serve(async (req) => {
   const now = Date.now();
 
   if (rateLimitRow && now - new Date(rateLimitRow.last_request_at).getTime() < 3000) {
-    return jsonResponse({ blocked: true, reason: 'استنى ثواني وابعت تاني' }, 200);
+    return jsonResponse(blockedBody('too_fast'), 200);
   }
 
   let windowStart = now;
@@ -225,7 +469,7 @@ Deno.serve(async (req) => {
     const windowAgeMs = now - new Date(rateLimitRow.window_start).getTime();
     if (windowAgeMs < WINDOW_MS) {
       if (rateLimitRow.request_count >= MAX_PER_WINDOW) {
-        return jsonResponse({ blocked: true, reason: 'بعتّ رسايل كتير أوي في وقت قصير، استنى دقيقة وجرّب تاني' }, 200);
+        return jsonResponse(blockedBody('too_many'), 200);
       }
       windowStart = new Date(rateLimitRow.window_start).getTime();
       requestCount = rateLimitRow.request_count + 1;
@@ -239,151 +483,94 @@ Deno.serve(async (req) => {
     request_count: requestCount,
   });
 
-  let body: { message?: string };
-  try {
-    body = await req.json();
-  } catch {
-    return jsonResponse({ error: 'invalid body' }, 400);
-  }
   const message = body.message?.trim();
   if (!message) {
     return jsonResponse({ error: 'رسالة فاضية' }, 400);
   }
+  if (message.length > 4000) {
+    return jsonResponse({ error: 'الرسالة طويلة أوي' }, 400);
+  }
 
-  // بنسجّل سؤال الطالب بس (مش رد الـ AI) في ai_chat_logs عشان الأدمن يقدر
-  // يراجع هل الاستخدام في المنهج ولا لأ — بمحاولة أفضل جهد (best-effort)،
-  // يعني لو فشل التسجيل لأي سبب، متوقفش رد الطالب خالص. الجدول ده بيتمسح
-  // منه تلقائيًا أي صف أقدم من 60 يوم (شوف sql/supabase_admin_improvements.sql)
+  // بنسجّل سؤال الطالب بس (مش رد الـ AI) في ai_chat_logs عشان الأدمن يقدر يراجع هل الاستخدام
+  // في المنهج ولا لأ — best-effort: لو فشل التسجيل متوقفش رد الطالب. بيتمسح تلقائيًا بعد 60 يوم.
+  // (بنسجّل حتى الأسئلة اللي بتتحظر — دي بتوري حجم الطلب الحقيقي على بو)
   admin
     .from('ai_chat_logs')
     .insert({ user_id: userId, question: message })
-    .then(({ error }) => {
+    .then(({ error }: { error: { message: string } | null }) => {
       if (error) console.error('ai_chat_logs insert error:', error);
     });
 
-  // 1) الميزة مفعّلة عمومًا في app_settings؟
-  const { data: settingsRow } = await admin
-    .from('app_settings')
-    .select('value')
-    .eq('key', 'ai_assistant')
-    .maybeSingle();
-
-  const settings = settingsRow?.value as {
-    enabled?: boolean;
-    daily_limit_per_user?: number;
-    monthly_limit_global?: number;
-    model?: string;
-  } | null;
-
-  if (!settings?.enabled) {
-    return jsonResponse({ blocked: true, reason: 'المساعد الذكي مش متاح دلوقتي' }, 200);
+  // الحدود كلها (الميزة شغالة؟ الطالب مفعّل؟ حده اليومي؟ السقف الشهري؟ فيه موديل متاح؟)
+  // بتتحسب في مكان واحد — نفس اللي بيشوفه الطالب في التطبيق
+  const s = await loadState(admin, userId, new Date());
+  if (!s.status.available) {
+    const extra: Record<string, unknown> = { status: s.status };
+    if (s.status.retry_at) extra.retry_at = s.status.retry_at;
+    return jsonResponse(blockedBody(s.status.state, extra), 200);
   }
 
-  // 2) الميزة مفعّلة لنفس الطالب ده تحديدًا في ai_access؟
-  const { data: access } = await admin
-    .from('ai_access')
-    .select('enabled, daily_limit_override')
-    .eq('user_id', userId)
-    .maybeSingle();
+  // كل الحدود تمام — نكلم Gemini بالترتيب: الأساسي، وبعده البدائل لو فشل أو حصته خلصت
+  const contents = buildContents(sanitizeHistory(body.history), message);
+  const started = Date.now();
+  const failures: { model: string; failure: GeminiFailure }[] = [];
+  let replyText: string | null = null;
+  let usedModel = '';
+  let usage = { input: 0, output: 0 };
 
-  if (!access?.enabled) {
-    return jsonResponse({ blocked: true, reason: 'المساعد الذكي مش مفعّل على حسابك — كلّم الأدمن لو حابب تفعّله' }, 200);
+  for (const model of s.available) {
+    const left = TOTAL_BUDGET_MS - (Date.now() - started);
+    if (left < 4_000) break;
+    const r = await callGemini(model, contents, Math.min(ATTEMPT_TIMEOUT_MS, left));
+    if (r.ok) {
+      replyText = r.text;
+      usedModel = model;
+      usage = r.usage;
+      break;
+    }
+    failures.push({ model, failure: r.failure });
+    await markModelFailure(admin, s.cooldowns, model, r.failure, new Date());
+    if (r.failure.kind === 'auth') break; // المفتاح نفسه واقع — مفيش فايدة من باقي الموديلات
   }
 
-  // 3) الحد اليومي (مخصص للطالب لو موجود، وإلا الافتراضي العام)
-  const dailyLimit = access.daily_limit_override ?? settings.daily_limit_per_user ?? 20;
-  const today = new Date().toISOString().slice(0, 10); // yyyy-MM-dd
-
-  const { data: dailyRow } = await admin
-    .from('ai_usage_daily')
-    .select('message_count')
-    .eq('user_id', userId)
-    .eq('usage_date', today)
-    .maybeSingle();
-
-  const dailyCount = dailyRow?.message_count ?? 0;
-  if (dailyCount >= dailyLimit) {
-    return jsonResponse({ blocked: true, reason: 'وصلت لحد الرسائل بتاع النهاردة، جرّب تاني بكرة' }, 200);
-  }
-
-  // 4) السقف الشهري الإجمالي للتطبيق كله (بيفضل شغال فوق الكل، حماية أخيرة
-  // للميزانية المجانية مهما كانت حدود الأفراد)
-  const monthKey = today.slice(0, 7); // yyyy-MM
-  const monthlyLimit = settings.monthly_limit_global ?? 3000;
-
-  const { data: monthlyRow } = await admin
-    .from('ai_usage_monthly')
-    .select('message_count')
-    .eq('month', monthKey)
-    .maybeSingle();
-
-  const monthlyCount = monthlyRow?.message_count ?? 0;
-  if (monthlyCount >= monthlyLimit) {
-    return jsonResponse({ blocked: true, reason: 'المساعد الذكي وصل لأقصى استخدام الشهر ده لكل الطلاب، حاول الشهر الجاي' }, 200);
-  }
-
-  // 5) كل الحدود تمام — نكلم Gemini
-  const model = settings.model || 'gemini-2.5-flash-lite';
-  let replyText: string;
-  try {
-    const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
-          contents: [{ role: 'user', parts: [{ text: message }] }],
-          generationConfig: {
-            maxOutputTokens: 4096,
-            temperature: 0.6,
-          },
-        }),
-      },
+  if (replyText === null) {
+    // لو السبب إن كل الموديلات حصتها خلصت: ده مش خطأ، ده "رصيد بو خلص" بوقت رجوع واضح
+    const after = availableModels(s.chain, s.cooldowns, new Date());
+    const allQuota = failures.length > 0 && failures.every((f) => isQuotaKind(f.failure.kind));
+    if (after.available.length === 0 && after.allQuota && allQuota) {
+      await alertAllExhausted(admin, after.earliestRetry);
+      const status = { ...s.status, state: 'models_exhausted', available: false, retry_at: after.earliestRetry?.toISOString() ?? null };
+      return jsonResponse(blockedBody('models_exhausted', { status, retry_at: status.retry_at }), 200);
+    }
+    const last = failures[failures.length - 1];
+    await alertGeminiFailure(
+      admin,
+      last ? `الموديل ${last.model} → ${last.failure.kind}\n${last.failure.detail.slice(0, 160)}` : 'محدش من الموديلات اشتغل (الوقت خلص قبل أي محاولة)',
     );
-
-    if (!geminiRes.ok) {
-      // بنسجّل نص الخطأ الفعلي من Gemini في الـ logs (مش بس status code) —
-      // يظهر في Supabase Dashboard → Edge Functions → ai-assistant → Logs،
-      // عشان أي فشل جاي يبان سببه واضح بدل ما نضطر نخمّن
-      const errBody = await geminiRes.text();
-      console.error('Gemini API error:', geminiRes.status, errBody);
-      await alertGeminiFailure(admin, `كود الخطأ: ${geminiRes.status}`);
-      return jsonResponse({ error: 'حصل خطأ، حاول تاني' }, 502);
-    }
-
-    const geminiData = await geminiRes.json();
-    // بنجمع كل الـ parts مع بعض (مش parts[0] بس) — بعض الردود بتيجي مقسّمة
-    // على أكتر من part، وده كان ممكن يفسّر جزء من مشكلة الردود الناقصة كمان
-    const parts = geminiData?.candidates?.[0]?.content?.parts as { text?: string }[] | undefined;
-    replyText = parts?.map((p) => p.text ?? '').join('').trim() ?? '';
-
-    // تسجيل السبب اللي خلّى Gemini يوقف — يظهر في Supabase Dashboard →
-    // Edge Functions → ai-assistant → Logs. لو شفت "MAX_TOKENS" هنا رغم
-    // الرفع لـ 4096، يبقى في مشكلة تانية غير حجم الميزانية نفسه
-    const finishReason = geminiData?.candidates?.[0]?.finishReason;
-    console.log('Gemini finishReason:', finishReason, '| reply length:', replyText.length);
-
-    if (!replyText) {
-      console.error('Gemini returned empty reply. Raw response:', JSON.stringify(geminiData));
-      await alertGeminiFailure(admin, 'رجع رد فاضي من Gemini');
-      return jsonResponse({ error: 'حصل خطأ، حاول تاني' }, 502);
-    }
-  } catch (e) {
-    console.error('Unexpected error calling Gemini:', e);
-    await alertGeminiFailure(admin, `خطأ غير متوقع: ${String(e)}`);
-    return jsonResponse({ error: 'حصل خطأ، حاول تاني' }, 502);
+    return jsonResponse({ error: 'حصل خطأ، حاول تاني', code: 'busy' }, 502);
   }
 
-  // 6) تحديث العدادات (بعد نجاح الرد، مش قبله — عشان طلب فاشل ميستهلكش الحد)
-  const newMonthlyCount = await recordUsage(admin, userId, today, monthKey, dailyCount, monthlyCount);
+  // تحديث العدادات (بعد نجاح الرد، مش قبله — عشان طلب فاشل ميستهلكش الحد)
+  const newMonthlyCount = await recordUsage(admin, userId, s.today, s.monthKey, s.dailyCount, s.monthlyCount);
+
+  // سجل التكلفة: الموديل وعدد التوكنز (من غير أي محتوى). best-effort: فشله مبيأثرش على الرد
+  admin
+    .from('ai_usage_events')
+    .insert({ user_id: userId, plan_id: s.plan?.id ?? null, model: usedModel, input_tokens: usage.input, output_tokens: usage.output })
+    .then(({ error }: { error: { message: string } | null }) => {
+      if (error) console.error('ai_usage_events insert error:', error.message);
+    });
 
   // تنبيه الـ 80% / 100%: بعد ما الرد يتبعت للطالب لو البيئة بتدعم waitUntil، عشان مايتأخرش
-  const alertJob = alertUsageThresholds(admin, newMonthlyCount, monthlyLimit, monthKey);
+  const alertJob = alertUsageThresholds(admin, newMonthlyCount, s.monthlyLimit, s.monthKey);
   // deno-lint-ignore no-explicit-any
   const edgeRuntime = (globalThis as any).EdgeRuntime;
   if (edgeRuntime?.waitUntil) edgeRuntime.waitUntil(alertJob);
   else await alertJob;
 
-  return jsonResponse({ reply: replyText });
+  return jsonResponse({
+    reply: replyText,
+    daily_limit: s.dailyLimit,
+    remaining_today: Math.max(0, s.dailyLimit - s.dailyCount - 1),
+  });
 });

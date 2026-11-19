@@ -4,6 +4,7 @@ import { supabase } from '../supabaseClient';
 import { PageHeader, Spinner, Stamp, useToast } from '../components/UI';
 import { cairoDate, DAY_MS, isMissingRelation, sumDaily } from '../lib/clientErrors';
 import { fetchAll } from '../lib/fetchAll';
+import AiSubscriptionsCard from '../components/ai/AiSubscriptionsCard';
 
 function topSubjects(threads) {
   const counts = {};
@@ -382,6 +383,10 @@ export default function Overview() {
             )}
           </div>
         </div>
+      </div>
+
+      <div className="mb-5">
+        <AiSubscriptionsCard />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">

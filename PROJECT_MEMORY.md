@@ -12,7 +12,7 @@ React + Vite على Vercel (بيبني تلقائي من `main`)، والباك 
 التطبيق نفسه (Flutter) في ريبو تاني، ومالوش علاقة بملفات الذاكرة دي.
 
 ## الهيكل
-- `src/pages/` صفحات اللوحة، `src/lib/` (audit، csv، url، diff، appSettings، unlockables، errors)، `src/constants/unlockables.js` كتالوج المميزات المقفولة
+- `src/pages/` صفحات اللوحة، `src/components/ai/` (كل مكونات بو: حالة الموديلات، محرر القوايم، الخطط، الاشتراكات، الأسعار، كارت الرئيسية)، `src/lib/` (audit، csv، url، diff، appSettings، unlockables، errors، `aiModels` و`aiPlans` و`contactLinks` منطق بو)، `tests/lib/` اختبارات المنطق (`npm run test:lib`)، `tests/edge/` اختبارات دالة `ai-assistant` على Deno (`npm run test:edge`)، `src/constants/unlockables.js` كتالوج المميزات المقفولة
 - `supabase/functions/` الـ Edge Functions
 - `sql/` كل ملفات SQL (فيه `README.md` بالترتيب والحالة، و`verify_db_state.sql` للفحص)
 
@@ -56,6 +56,7 @@ React + Vite على Vercel (بيبني تلقائي من `main`)، والباك 
 
 ## شغل مفتوح
 - **تشغيل بالترتيب** (كلها في `sql/`): من كلود التطبيق: `supabase_division_fix.sql` ← `supabase_profile_division_lock.sql` ← `supabase_catalog_lessons.sql`، وبعدها بتاعتنا: `supabase_division_promotion.sql` ← `supabase_catalog_admin.sql`، و`supabase_security_hardening.sql` (مهم) ← `supabase_client_errors_v2.sql` (من كلود التطبيق، لازم الأول عشان صفحة الأعطال الجديدة) ← `supabase_client_error_alerts.sql` ← `supabase_ai_usage_alerts.sql` ← `supabase_user_stats_guard.sql`، واختياري `supabase_ai_auto_enable.sql`. وبعدها `verify_db_state.sql` و`check_rls.sql`.
+- **بو (من 2026-11-19):** شغّل `supabase_ai_model_state.sql` ثم `supabase_ai_plans.sql`، وبعدين انشر `supabase functions deploy ai-assistant` (من غير النشر مفيش أي تغيير). من الإعدادات: الأساسي موديل حصته اليومية كبيرة، والبدائل بالترتيب، وارفع `monthly_limit_global`، وسجّل أسعار الموديلات وسعر الدولار. وراجع `contact_links`.
 - **نشر الفنكشنز:** `ai-assistant` و`classify-ai-questions` و`weekly-report` و`client-errors-alert` (اتعدّلوا).
 - مستني: ربط المميزات المقفولة بالتطبيق جاهز في الكود، والنسخة المنشورة على الأجهزة لسه ممكن تكون أقدم.
 - مستني من كلود التطبيق: إصلاح `updated_at` (بند 9).
@@ -155,3 +156,11 @@ git add . ; git commit -m "..." ; git push origin main
 - اكتشفنا بالاختبار إن طلاب "الشعبة لسه فاضية" كانوا بيتحسبوا "غير مطابق" بالغلط (بند 16 في `PROBLEMS_LOG.md`).
 - اتجرّب: منطق التقسيم (25)، منطق المنهج (34)، الواجهة: تقسيم وترقية (56) ودروس المنهج (65)، وSQL الترقية على Postgres محلي (معاينة، نسخة احتياطية، رفض الصلاحيات والصف الثالث، ذرّية، وكل قواعد النقل)، وview العدّادات. وفحص overflow في متصفح حقيقي: صفحات اللوحة × 5 عرضات (320 لـ 1440) + 7 حالات تفاعلية (لوحة الترقية، التوزيع، محرر الطالب، محرر الدروس، النسخ، المادة، التغطية): صفر overflow.
 
+### 2026-11-19 (بو: إصلاح ٤٢٩ وخطط واشتراكات)
+- نفّذنا تسليم كلود التطبيق (`DASHBOARD_TODO_ai_status` و`DASHBOARD_TODO_ai_plans`). ملفات الباك إند اتدمجت زي ما هي: `ai-assistant/index.ts` (بديل كامل، نسخة الريبو كانت مطابقة للأساس فمفيش شغل ضاع) و`ai-core.ts` و`sql/supabase_ai_model_state.sql` و`sql/supabase_ai_plans.sql` و`tests/edge/` (٣١ اختبار نجحوا على Deno).
+- **الإعدادات:** كارت "حالة موديلات بو" (متاح/خالص لحد وقت القاهرة مع السبب، شريط تحذير لو الكل خالص، تحديث يدوي وكل دقيقة، رسالة لو الجدول مش موجود)، ومحرر `fallback_models` (إضافة وحذف وأسهم، فحص بنفس قواعد الدالة)، ونص تنبيه الحصة المجانية، وتحذيرات `contact_links`، وقسم أسعار الموديلات `ai_pricing`. الحفظ بيحتفظ بباقي حقول `ai_assistant`، وتغيير السلسلة بيتسجّل في سجل النشاط.
+- **صفحة خطط بو** (`/ai-plans`): إضافة وتعديل وإخفاء وترتيب ومسح (مرفوض لو عليها اشتراكات برسالة "اخفِها").
+- **صفحة اشتراكات بو** (`/ai-subscriptions`): تبويبات (فعّالة، بتنتهي خلال ٧ أيام، منتهية، ملغية) وبحث بالاسم وتفعيل بسؤال التجديد/الاستبدال وإلغاء بتأكيد. مفيش مسح. كله في سجل النشاط.
+- **الرئيسية:** كارت "اشتراكات بو" (فعّالة، بتنتهي قريب، دخل الشهر، تكلفة تقديرية، صافي، أعمدة آخر ٦ شهور، وطلبات بو النهاردة). **الحسابات وملف الطالب:** شارة الخطة وتاريخ الانتهاء ورابط لتفعيل اشتراك.
+- اتجرّب: ٢٤ اختبار منطق (`tests/lib`)، وSSR لمحرر القوايم، و`vite build`. **مااتجرّبش على متصفح حقيقي ولا على Supabase حقيقي**، فجرّب بخطوات الاختبار في ملف التسليم بعد ما تشغّل الـ SQL وتنشر الدالة.
+- لم نلمس كود Flutter.

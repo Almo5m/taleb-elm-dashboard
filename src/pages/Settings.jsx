@@ -5,6 +5,11 @@ import { useAppUser } from '../context/AppUser';
 import { logAction } from '../lib/audit';
 import { validateHttpsUrl } from '../lib/url';
 import { diffFields } from '../lib/diff';
+import ModelChainEditor from '../components/ai/ModelChainEditor';
+import ModelStatusCard from '../components/ai/ModelStatusCard';
+import AiPricingSection from '../components/ai/AiPricingSection';
+import { contactWarnings } from '../lib/contactLinks';
+import { buildChain, modelNameProblem, normalizeModelName, validateModelList } from '../lib/aiModels';
 
 // الصفحات القانونية (legal_links) ومشاركة التطبيق (share_settings): الحقول فاضية
 // لحد ما الأدمن يملاها — مفيش أي قيمة افتراضية في الكود، والتطبيق بيقول للطالب
@@ -116,8 +121,9 @@ export default function Settings() {
   const [savingLinks, setSavingLinks] = useState(false);
 
   // المساعد الذكي
-  const AI_DEFAULTS = { enabled: false, auto_enable_new: false, daily_limit_per_user: 20, monthly_limit_global: 3000, model: 'gemini-2.5-flash-lite' };
+  const AI_DEFAULTS = { enabled: false, auto_enable_new: false, daily_limit_per_user: 20, monthly_limit_global: 3000, model: 'gemini-2.5-flash-lite', fallback_models: [] };
   const [aiAssistant, setAiAssistant] = useState(AI_DEFAULTS);
+  const [aiSaved, setAiSaved] = useState({ model: AI_DEFAULTS.model, fallback_models: [] }); // القيم المحفوظة فعلًا (كارت الحالة بيعتمد عليها)
   const [savingAi, setSavingAi] = useState(false);
   const [aiUsage, setAiUsage] = useState({ loading: true, count: null, error: false });
   const [aiCounts, setAiCounts] = useState({ students: null, enabled: null });
@@ -156,7 +162,10 @@ export default function Settings() {
       setMaintenance(maint || { enabled: false, message: '' });
       setMinVersion(ver?.android || '1.0.0');
       setDownloadUrl(ver?.url || '');
-      setAiAssistant({ ...AI_DEFAULTS, ...(ai || {}) });
+      const loadedAi = { ...AI_DEFAULTS, ...(ai || {}) };
+      loadedAi.fallback_models = Array.isArray(loadedAi.fallback_models) ? loadedAi.fallback_models.filter((m) => typeof m === 'string') : [];
+      setAiAssistant(loadedAi);
+      setAiSaved({ model: loadedAi.model, fallback_models: loadedAi.fallback_models });
       setPasswordResetUrl(pwResetUrl || '');
       setRatingUrl(ratingLink || '');
       setCatchupEnabled(studyPlan?.catchup_enabled === true);
@@ -401,18 +410,36 @@ export default function Settings() {
       toast('السقف الشهري الإجمالي لازم يكون رقم صحيح أكبر من صفر', 'error');
       return;
     }
-    if (!model) {
-      toast('اسم الموديل مينفعش يبقى فاضي', 'error');
+    const modelProblem = modelNameProblem(model);
+    if (modelProblem) {
+      toast(modelProblem, 'error');
+      return;
+    }
+    const fallbackCheck = validateModelList(aiAssistant.fallback_models, { primary: model });
+    if (fallbackCheck.error) {
+      toast(`الموديلات البديلة: ${fallbackCheck.error}`, 'error');
       return;
     }
 
     setSavingAi(true);
     // بنحتفظ بأي حقول تانية في الإعداد (زي auto_enable_new) بدل ما نمسحها
-    const payload = { ...aiAssistant, auto_enable_new: !!aiAssistant.auto_enable_new, daily_limit_per_user: dailyLimit, monthly_limit_global: monthlyLimit, model };
+    const payload = { ...aiAssistant, auto_enable_new: !!aiAssistant.auto_enable_new, daily_limit_per_user: dailyLimit, monthly_limit_global: monthlyLimit, model: normalizeModelName(model), fallback_models: fallbackCheck.cleaned };
     const { error } = await writeSetting('ai_assistant', payload);
     setSavingAi(false);
     if (error) { toast('تعذّر الحفظ', 'error', error); return; }
     setAiAssistant(payload);
+    const chainChanged = buildChain(aiSaved.model, aiSaved.fallback_models).join() !== buildChain(payload.model, payload.fallback_models).join();
+    setAiSaved({ model: payload.model, fallback_models: payload.fallback_models });
+    if (chainChanged) {
+      logAction({
+        adminId: me?.id,
+        adminName: me?.name || 'أدمن',
+        action: 'ai_models_update',
+        targetType: 'app_settings',
+        targetId: 'ai_assistant',
+        details: { from: buildChain(aiSaved.model, aiSaved.fallback_models), to: buildChain(payload.model, payload.fallback_models) },
+      });
+    }
     toast(aiAssistant.enabled ? 'تم حفظ إعدادات المساعد الذكي — الميزة مفعّلة' : 'تم حفظ إعدادات المساعد الذكي');
   };
 
@@ -615,6 +642,8 @@ export default function Settings() {
         })}
       </Section>
 
+      <ModelStatusCard primary={aiSaved.model} fallbacks={aiSaved.fallback_models} />
+
       <Section
         title="المساعد الذكي"
         hint="التحكم في مساعد الذكاء الاصطناعي جوه التطبيق وحدود استخدامه"
@@ -677,7 +706,23 @@ export default function Settings() {
           onChange={(e) => setAiAssistant({ ...aiAssistant, model: e.target.value })}
           className="input-field mt-1"
         />
-        <p className="text-xs text-muted mt-1 mb-4">بيسمح بتغيير المزوّد لاحقًا من غير تحديث تطبيق</p>
+        <p className="text-xs text-muted mt-1 mb-1">بيسمح بتغيير المزوّد لاحقًا من غير تحديث تطبيق</p>
+        <p className="text-xs text-amber-dark bg-amber/10 border border-amber/30 rounded-lg px-2.5 py-2 mb-4">
+          الحصة المجانية عند جوجل بتختلف من موديل لموديل (بعض الموديلات حدها ٢٠ طلب في اليوم لكل المشروع). شوف الحدود الفعلية من Google AI Studio ← Rate limit.
+          الأفضل الأساسي يكون موديل حصته اليومية كبيرة، والأقوى يتحط بعده كبديل.
+        </p>
+
+        <p className="text-xs text-muted font-semibold mb-1" id="ai-fallbacks-label">الموديلات البديلة</p>
+        <p className="text-[11px] text-muted mb-2">الترتيب = الأولوية. بو بيبدأ بالأساسي ولو حصته خلصت بيكمّل على اللي بعده.</p>
+        <div className="mb-4">
+          <ModelChainEditor
+            id="ai-fallbacks"
+            value={aiAssistant.fallback_models}
+            onChange={(fallback_models) => setAiAssistant({ ...aiAssistant, fallback_models })}
+            primary={aiAssistant.model}
+            emptyText="مفيش بدائل. لو حصة الأساسي خلصت بو هيقف عند الطلاب."
+          />
+        </div>
 
         <div className="bg-surface rounded-xl px-3 py-2.5">
           <p className="text-xs text-muted font-semibold mb-1">الاستهلاك الشهري الحالي</p>
@@ -699,6 +744,8 @@ export default function Settings() {
           autoEnable={!!aiAssistant.auto_enable_new}
         />
       </Section>
+
+      <AiPricingSection knownModels={buildChain(aiSaved.model, aiSaved.fallback_models)} />
 
       <Section
         title="خطة المذاكرة"
@@ -735,6 +782,9 @@ export default function Settings() {
             </div>
           ))}
         </div>
+        {contactWarnings(contact).map((w) => (
+          <p key={w} className="text-[11px] text-coral-dark font-semibold mt-2">⚠️ {w}</p>
+        ))}
       </Section>
 
       <Section
