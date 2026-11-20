@@ -6,6 +6,7 @@ import { useAppUser } from '../context/AppUser';
 import { logAction } from '../lib/audit';
 import { exportToCsv } from '../lib/csv';
 import { fetchAll, inChunks } from '../lib/fetchAll';
+import BulkActionsPanel from '../components/BulkActionsPanel';
 import { GRADES, divisionStatus, isPendingTrack } from '../lib/divisions';
 import PromotionPanel from '../components/PromotionPanel';
 import DistributionCard from '../components/DistributionCard';
@@ -105,51 +106,60 @@ export default function Accounts() {
 
   const clearSelection = () => setSelected(new Set());
 
-  const bulkBan = async () => {
-    const ids = [...selected];
-    if (ids.length === 0) return;
-    const ok = await confirm(`هتحظر ${ids.length} حساب دفعة واحدة، متأكد؟`, { danger: true, confirmLabel: `حظر ${ids.length} حساب` });
-    if (!ok) return;
-    const { error, done } = await inChunks(ids, (part) => supabase.from('profiles').update({ banned: true }).in('id', part));
-    if (error) {
-      toast(`الحظر الجماعي وقف بعد ${done} من ${ids.length} حساب — اللي قبل كده اتنفّذ`, 'error', error);
-      load();
-      return;
-    }
-    setProfiles((prev) => prev.map((p) => (ids.includes(p.id) ? { ...p, banned: true } : p)));
-    audit('bulk_ban', null, `حظر جماعي لـ ${ids.length} حساب`);
-    toast(`تم حظر ${ids.length} حساب`);
-    clearSelection();
-  };
-
-  // تفعيل/إيقاف المساعد الذكي لمجموعة طلاب دفعة واحدة (بيحافظ على الحد اليومي المخصص لكل طالب)
-  const setAiForIds = async (ids, enabled) => {
+  // عملية جماعية واحدة (من BulkActionsPanel). كلها بتتقسّم على دفعات، ولو وقفت في النص بتقولك وصلت لحد فين.
+  const runBulk = async ({ action, ids, skipped, scopeLabel, label, danger }) => {
     if (ids.length === 0 || bulkBusy) return;
-    const label = enabled ? 'تفعيل' : 'إيقاف';
-    const ok = await confirm(`هتعمل ${label} للمساعد الذكي لـ ${ids.length} طالب دفعة واحدة، متأكد؟`, {
-      danger: !enabled,
+    const skipNote = skipped > 0 ? ` (هيتخطّى ${skipped} لأنهم في الحالة دي أصلًا)` : '';
+    const ok = await confirm(`${label}: ${scopeLabel}، ${ids.length} طالب${skipNote}. متأكد؟`, {
+      danger,
       confirmLabel: `${label} لـ ${ids.length} طالب`,
     });
     if (!ok) return;
     setBulkBusy(true);
     const now = new Date().toISOString();
-    for (let i = 0; i < ids.length; i += 500) {
-      const chunk = ids.slice(i, i + 500).map((id) => ({ user_id: id, enabled, updated_at: now }));
-      const { error } = await supabase.from('ai_access').upsert(chunk, { onConflict: 'user_id' });
-      if (error) {
-        toast(`${label} المساعد الذكي وقف عند ${i} من ${ids.length} — اللي قبل كده اتنفّذ`, 'error', error);
-        setBulkBusy(false);
-        load();
-        return;
+    let failure = null;
+    let done = 0;
+
+    if (action === 'ai_on' || action === 'ai_off') {
+      const enabled = action === 'ai_on';
+      for (let i = 0; i < ids.length; i += 500) {
+        const chunk = ids.slice(i, i + 500).map((id) => ({ user_id: id, enabled, updated_at: now }));
+        const { error } = await supabase.from('ai_access').upsert(chunk, { onConflict: 'user_id' });
+        if (error) { failure = error; break; }
+        done = Math.min(i + 500, ids.length);
       }
+    } else if (action === 'ai_reset_limit') {
+      ({ error: failure, done } = await inChunks(ids, (part) => supabase.from('ai_access').update({ daily_limit_override: null, updated_at: now }).in('user_id', part)));
+    } else {
+      const banned = action === 'ban';
+      ({ error: failure, done } = await inChunks(ids, (part) => supabase.from('profiles').update({ banned }).in('id', part)));
     }
-    setAiAccess((prev) => {
-      const next = { ...prev };
-      ids.forEach((id) => { next[id] = { daily_limit_override: null, ...(next[id] || {}), enabled }; });
-      return next;
-    });
-    audit(enabled ? 'bulk_ai_enable' : 'bulk_ai_disable', null, `${label} المساعد الذكي لـ ${ids.length} طالب`);
-    toast(`تم ${label} المساعد الذكي لـ ${ids.length} طالب`);
+
+    if (failure) {
+      toast(`${label} وقف بعد ${done} من ${ids.length} طالب. اللي قبل كده اتنفّذ`, 'error', failure);
+      setBulkBusy(false);
+      load();
+      return;
+    }
+
+    const idSet = new Set(ids);
+    if (action === 'ai_on' || action === 'ai_off') {
+      setAiAccess((prev) => {
+        const next = { ...prev };
+        ids.forEach((id) => { next[id] = { daily_limit_override: null, ...(next[id] || {}), enabled: action === 'ai_on' }; });
+        return next;
+      });
+    } else if (action === 'ai_reset_limit') {
+      setAiAccess((prev) => {
+        const next = { ...prev };
+        ids.forEach((id) => { if (next[id]) next[id] = { ...next[id], daily_limit_override: null }; });
+        return next;
+      });
+    } else {
+      setProfiles((prev) => prev.map((p) => (idSet.has(p.id) ? { ...p, banned: action === 'ban' } : p)));
+    }
+    audit(`bulk_${action}`, null, `${label} (${scopeLabel}) لـ ${ids.length} طالب`);
+    toast(`تم: ${label} لـ ${ids.length} طالب`);
     setBulkBusy(false);
     clearSelection();
   };
@@ -163,10 +173,6 @@ export default function Accounts() {
     [profiles]
   );
 
-  const studentsWithoutAi = useMemo(
-    () => profiles.filter((p) => p.role === 'student' && !p.banned && !getAiAccess(p.id).enabled),
-    [profiles, aiAccess]
-  );
   const aiEnabledCount = useMemo(
     () => profiles.filter((p) => getAiAccess(p.id).enabled).length,
     [profiles, aiAccess]
@@ -266,32 +272,17 @@ export default function Accounts() {
             <button onClick={clearSelection} className="font-semibold text-muted hover:text-inktext">إلغاء التحديد</button>
           )}
         </div>
-        {selected.size > 0 && (
-          <div className="flex gap-2 flex-wrap">
-            <button onClick={() => setAiForIds([...selected], true)} disabled={bulkBusy} className="btn-primary !px-4 !py-2 text-sm">
-              تفعيل المساعد الذكي ({selected.size})
-            </button>
-            <button onClick={() => setAiForIds([...selected], false)} disabled={bulkBusy} className="btn-ghost !px-4 !py-2 text-sm">
-              إيقاف المساعد الذكي ({selected.size})
-            </button>
-            <button onClick={bulkBan} className="btn-danger !px-4 !py-2 text-sm">حظر المحدَّدين ({selected.size})</button>
-          </div>
-        )}
       </div>
 
-      {studentsWithoutAi.length > 0 && !loading && (
-        <div className="card p-3 mb-4 flex items-center justify-between gap-3 flex-wrap bg-surface/60">
-          <p className="text-sm text-muted">
-            <span className="font-semibold text-inktext">{studentsWithoutAi.length}</span> طالب مالهمش المساعد الذكي مفعّل.
-          </p>
-          <button
-            onClick={() => setAiForIds(studentsWithoutAi.map((p) => p.id), true)}
-            disabled={bulkBusy}
-            className="btn-primary !px-4 !py-2 text-sm"
-          >
-            فعّل المساعد لكلهم
-          </button>
-        </div>
+      {!loading && (
+        <BulkActionsPanel
+          profiles={profiles}
+          filteredIds={filtered.map((p) => p.id)}
+          selected={selected}
+          aiAccess={aiAccess}
+          busy={bulkBusy}
+          onRun={runBulk}
+        />
       )}
 
       {loading ? (

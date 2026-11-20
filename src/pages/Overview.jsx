@@ -4,7 +4,6 @@ import { supabase } from '../supabaseClient';
 import { PageHeader, Spinner, Stamp, useToast } from '../components/UI';
 import { cairoDate, DAY_MS, isMissingRelation, sumDaily } from '../lib/clientErrors';
 import { fetchAll } from '../lib/fetchAll';
-import AiSubscriptionsCard from '../components/ai/AiSubscriptionsCard';
 
 function topSubjects(threads) {
   const counts = {};
@@ -385,10 +384,6 @@ export default function Overview() {
         </div>
       </div>
 
-      <div className="mb-5">
-        <AiSubscriptionsCard />
-      </div>
-
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
         <div className="card p-6">
           <div className="flex items-center justify-between mb-1">
@@ -420,6 +415,7 @@ export default function Overview() {
         <div className="card p-6">
           <div className="flex items-center justify-between mb-1">
             <p className="font-messiri font-bold">أحدث أسئلة الطلاب للمساعد الذكي</p>
+            <Link to="/ai?tab=questions" className="text-xs font-semibold text-muted hover:text-inktext">كل الأسئلة بنصها الكامل ←</Link>
           </div>
           <p className="text-xs text-muted mb-4">
             راجع الأسئلة لتقييم هل الاستخدام في المنهج ولا لأ — بتتمسح تلقائيًا بعد 60 يوم
@@ -444,7 +440,7 @@ export default function Overview() {
                       </Stamp>
                     )}
                   </div>
-                  <p className="text-sm truncate">{q.question}</p>
+                  <p className="text-sm line-clamp-3 whitespace-pre-wrap break-words" dir="auto">{q.question}</p>
                 </div>
               ))}
             </div>

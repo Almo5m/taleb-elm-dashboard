@@ -1,9 +1,29 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { PageHeader, Spinner, Stamp, EmptyState, useToast, useConfirm } from '../components/UI';
 import { useAppUser } from '../context/AppUser';
 import { logAction } from '../lib/audit';
 import { fetchAll, inChunks } from '../lib/fetchAll';
+import { ROLE_STAMP, avatarColumnOf, formatCairoDateTime, uniqueValues } from '../lib/forum';
+import ReplyFeed from '../components/forum/ReplyFeed';
+
+// عمود صورة الكاتب في جدول الردود بيتكشف مرة واحدة من صف موجود (الجدول معرّف في ريبو التطبيق)
+let avatarColumnPromise = null;
+function detectReplyAvatarColumn() {
+  if (!avatarColumnPromise) {
+    avatarColumnPromise = supabase
+      .from('forum_replies')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .then(({ data, error }) => {
+        if (error) { avatarColumnPromise = null; return null; } // نجرّب تاني المرة الجاية
+        return avatarColumnOf(data?.[0]);
+      });
+  }
+  return avatarColumnPromise;
+}
 
 export default function Forum() {
   const [threads, setThreads] = useState([]);
@@ -15,6 +35,10 @@ export default function Forum() {
   const [selected, setSelected] = useState(new Set());
   const [replyDrafts, setReplyDrafts] = useState({});
   const [sendingReply, setSendingReply] = useState({});
+  const [roles, setRoles] = useState({}); // user_id -> role (لكتّاب الردود المعروضة)
+  const [view, setView] = useState('threads'); // threads | replies
+  const [params, setParams] = useSearchParams();
+  const openedFromLink = useRef(null);
   const toast = useToast();
   const confirm = useConfirm();
   const me = useAppUser();
@@ -37,18 +61,53 @@ export default function Forum() {
   const audit = (action, targetId, details) =>
     logAction({ adminId: me?.id, adminName: me?.name || 'مشرف', action, targetType: 'thread', targetId, details });
 
+  // أدوار كتّاب الردود (أدمن/مشرف) عشان الرد الإداري يتميّز
+  const loadRoles = async (rows) => {
+    const ids = uniqueValues(rows, 'author_id').filter((id) => !(id in roles));
+    if (ids.length === 0) return;
+    const { data } = await supabase.from('profiles').select('id, role').in('id', ids);
+    setRoles((prev) => ({ ...prev, ...Object.fromEntries((data || []).map((p) => [p.id, p.role])) }));
+  };
+
+  const loadReplies = async (id) => {
+    const { data, error } = await supabase.from('forum_replies').select('*').eq('thread_id', id).order('created_at');
+    if (error) toast('تعذّر تحميل الردود', 'error', error);
+    setReplies((prev) => ({ ...prev, [id]: data || [] }));
+    loadRoles(data);
+  };
+
   const toggleExpand = async (id) => {
     if (expandedId === id) {
       setExpandedId(null);
       return;
     }
     setExpandedId(id);
-    if (!replies[id]) {
-      const { data, error } = await supabase.from('forum_replies').select('*').eq('thread_id', id).order('created_at');
-      if (error) toast('تعذّر تحميل الردود', 'error', error);
-      setReplies((prev) => ({ ...prev, [id]: data || [] }));
-    }
+    if (!replies[id]) await loadReplies(id);
   };
+
+  // فتح سؤال معيّن: من رابط التليجرام (?thread=) أو من فيد آخر الردود
+  const openThread = async (id) => {
+    setView('threads');
+    setSearch('');
+    setGradeFilter('الكل');
+    setExpandedId(id);
+    if (!replies[id]) await loadReplies(id);
+    setTimeout(() => document.getElementById(`thread-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+  };
+
+  const threadParam = params.get('thread');
+  useEffect(() => {
+    if (!threadParam || loading || openedFromLink.current === threadParam) return;
+    openedFromLink.current = threadParam;
+    if (!threads.some((t) => String(t.id) === threadParam)) {
+      toast('السؤال ده مش موجود (ممكن يكون اتمسح)', 'error');
+    } else {
+      openThread(threads.find((t) => String(t.id) === threadParam).id);
+    }
+    const next = new URLSearchParams(params);
+    next.delete('thread');
+    setParams(next, { replace: true });
+  }, [threadParam, loading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const deleteThread = async (t) => {
     const ok = await confirm('هتحذف السؤال ده وكل الردود عليه، متأكد؟', { danger: true, confirmLabel: 'حذف السؤال' });
@@ -75,14 +134,15 @@ export default function Forum() {
     const body = (replyDrafts[threadId] || '').trim();
     if (!body) return;
     setSendingReply((prev) => ({ ...prev, [threadId]: true }));
-    const { data, error } = await supabase
-      .from('forum_replies')
-      .insert({ thread_id: threadId, author_id: me?.id, author_name: me?.name || 'الإدارة', body })
-      .select()
-      .single();
+    // صورة الأدمن بتتبعت مع الرد لو جدول الردود فيه عمود صورة (كان ردّك بيظهر في التطبيق من غير صورة)
+    const avatarColumn = await detectReplyAvatarColumn();
+    const row = { thread_id: threadId, author_id: me?.id, author_name: me?.name || 'الإدارة', body };
+    if (avatarColumn && me?.avatar_url) row[avatarColumn] = me.avatar_url;
+    const { data, error } = await supabase.from('forum_replies').insert(row).select().single();
     setSendingReply((prev) => ({ ...prev, [threadId]: false }));
     if (error) { toast('تعذّر إرسال الرد', 'error', error); return; }
     setReplies((prev) => ({ ...prev, [threadId]: [...(prev[threadId] || []), data] }));
+    setRoles((prev) => ({ ...prev, [me?.id]: me?.role }));
     setThreads((prev) => prev.map((t) => (t.id === threadId ? { ...t, replies_count: t.replies_count + 1 } : t)));
     setReplyDrafts((prev) => ({ ...prev, [threadId]: '' }));
     logAction({ adminId: me?.id, adminName: me?.name || 'مشرف', action: 'admin_reply', targetType: 'thread', targetId: threadId, details: 'رد إداري على سؤال في المنتدى' });
@@ -128,6 +188,27 @@ export default function Forum() {
     <div>
       <PageHeader eyebrow={`${threads.length} سؤال في المنتدى`} title="إدارة المنتدى" />
 
+      <div role="tablist" aria-label="عرض المنتدى" className="flex gap-2 mb-4">
+        {[['threads', 'الأسئلة'], ['replies', 'آخر الردود']].map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            aria-selected={view === key}
+            onClick={() => setView(key)}
+            className={`px-4 py-2 rounded-full text-sm font-semibold border transition ${
+              view === key ? 'bg-ink text-white border-ink' : 'bg-white text-muted border-surface-line hover:text-ink'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {view === 'replies' && <ReplyFeed onOpenThread={openThread} />}
+
+      {view === 'threads' && (<>
+
       <div className="card p-4 mb-4 flex flex-col md:flex-row md:flex-wrap gap-3">
         <input
           placeholder="ابحث في العناوين والأسئلة"
@@ -157,7 +238,7 @@ export default function Forum() {
       ) : (
         <div className="space-y-3">
           {filtered.map((t) => (
-            <div key={t.id} className="card overflow-hidden">
+            <div key={t.id} id={`thread-${t.id}`} className="card overflow-hidden scroll-mt-4">
               <div className="p-4 flex items-start justify-between gap-3">
                 <div className="flex items-start gap-3 flex-1 min-w-0">
                   <input
@@ -175,7 +256,9 @@ export default function Forum() {
                     <h3 className="font-bold">{t.title}</h3>
                     <p className="text-sm text-muted mt-1 line-clamp-2">{t.body}</p>
                     <p className="text-xs text-muted mt-2">
-                      {t.author_name} • {new Date(t.created_at).toLocaleDateString('ar-EG')} • {t.replies_count} رد
+                      {t.author_id ? (
+                        <Link to={`/accounts/${t.author_id}`} onClick={(e) => e.stopPropagation()} className="hover:underline">{t.author_name}</Link>
+                      ) : t.author_name} • {formatCairoDateTime(t.created_at)} • {t.replies_count} رد
                     </p>
                   </div>
                 </div>
@@ -192,15 +275,23 @@ export default function Forum() {
                     replies[t.id].map((r) => (
                       <div key={r.id} className="bg-surface-card border border-surface-line rounded-xl p-3 flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <p className="text-sm font-semibold">{r.author_name}</p>
-                          <p className="text-sm text-muted">{r.body}</p>
-                          <p className="text-xs text-muted mt-1">{new Date(r.created_at).toLocaleDateString('ar-EG')}</p>
+                          <p className="text-sm font-semibold flex items-center gap-2 flex-wrap">
+                            {r.author_id ? <Link to={`/accounts/${r.author_id}`} className="hover:underline">{r.author_name}</Link> : r.author_name}
+                            {ROLE_STAMP[roles[r.author_id]] && <Stamp tone={ROLE_STAMP[roles[r.author_id]][0]}>{ROLE_STAMP[roles[r.author_id]][1]}</Stamp>}
+                          </p>
+                          <p className="text-sm text-muted whitespace-pre-wrap break-words" dir="auto">{r.body}</p>
+                          <p className="text-xs text-muted mt-1">{formatCairoDateTime(r.created_at)}</p>
                         </div>
                         <button onClick={() => deleteReply(t.id, r.id)} className="text-xs font-semibold text-muted hover:text-coral px-2 py-1 whitespace-nowrap shrink-0">
                           حذف
                         </button>
                       </div>
                     ))
+                  )}
+                  {!me?.avatar_url && (
+                    <p className="text-[11px] text-amber-dark pt-1">
+                      حسابك من غير صورة، فردك هيظهر للطالب بدونها. <Link to="/profile" className="font-semibold underline">ضيف صورتك</Link>
+                    </p>
                   )}
                   <div className="flex gap-2 pt-2">
                     <input
@@ -225,6 +316,7 @@ export default function Forum() {
           ))}
         </div>
       )}
+      </>)}
     </div>
   );
 }

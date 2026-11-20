@@ -247,6 +247,7 @@ export default function StudentProfile() {
         <p className="text-xs text-muted mb-4">التحكم في وصول هذا الطالب للمساعد الذكي والاطّلاع على استهلاكه</p>
 
         <StudentPlanInfo userId={id} />
+        <Link to={`/ai?tab=questions&student=${id}`} className="text-xs font-semibold text-accent-dark hover:underline block mb-4">عرض أسئلة الطالب لبو بنصها الكامل ←</Link>
 
         <label className="flex items-center gap-3 mb-4 cursor-pointer">
           <input

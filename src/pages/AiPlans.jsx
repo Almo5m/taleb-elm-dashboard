@@ -7,28 +7,30 @@ import PlanDialog from '../components/ai/PlanDialog';
 import { logAction } from '../lib/audit';
 import { fetchAll } from '../lib/fetchAll';
 import { isMissingRelation } from '../lib/clientErrors';
-import { formatEgp, planDeleteMessage, reorderedPlans } from '../lib/aiPlans';
+import { canDeletePlan, countByPlan, formatEgp, planDeleteMessage, reorderedPlans } from '../lib/aiPlans';
 
 // خطط بو: الحد اليومي والمدة والسعر وموديلات الخطة. التطبيق بيعرض الخطة المفعّلة بس.
 // مفيش مسح لخطة عليها اشتراكات (السيرفر بيرفض)، الإخفاء هو البديل والمشتركين مبيتأثروش.
-export default function AiPlans() {
+export default function AiPlans({ embedded = false }) {
   const toast = useToast();
   const confirm = useConfirm();
   const me = useAppUser();
   const [loading, setLoading] = useState(true);
   const [missing, setMissing] = useState(false);
   const [plans, setPlans] = useState([]);
-  const [subscribers, setSubscribers] = useState({});
+  const [subscribers, setSubscribers] = useState({}); // فعّالين
+  const [totals, setTotals] = useState({}); // كل الاشتراكات في أي حالة (هي اللي بتمنع المسح)
   const [dialog, setDialog] = useState(null); // null | { plan? }
   const [busyId, setBusyId] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [planRes, subRes] = await Promise.all([
+    const [planRes, subRes, allRes] = await Promise.all([
       supabase.from('ai_plans').select('*').order('sort_order').order('id'),
       fetchAll(() => supabase.from('ai_subscriptions_view').select('id, plan_id').eq('effective_status', 'active').order('id')),
+      fetchAll(() => supabase.from('ai_subscriptions').select('id, plan_id').order('id')),
     ]);
-    const failure = planRes.error || subRes.error;
+    const failure = planRes.error || subRes.error || allRes.error;
     if (failure) {
       if (isMissingRelation(failure)) { setMissing(true); setLoading(false); return; }
       toast('تعذّر تحميل الخطط', 'error', failure);
@@ -37,9 +39,8 @@ export default function AiPlans() {
     }
     setMissing(false);
     setPlans(planRes.data || []);
-    const counts = {};
-    (subRes.data || []).forEach((s) => { counts[s.plan_id] = (counts[s.plan_id] || 0) + 1; });
-    setSubscribers(counts);
+    setSubscribers(countByPlan(subRes.data));
+    setTotals(countByPlan(allRes.data));
     setLoading(false);
   }, [toast]);
 
@@ -73,9 +74,7 @@ export default function AiPlans() {
   };
 
   const remove = async (plan) => {
-    const subs = subscribers[plan.id] || 0;
-    const warning = subs > 0 ? ` عليها ${subs} اشتراك فعّال، والمسح هيترفض. الأفضل تخفيها.` : '';
-    const ok = await confirm(`مسح خطة "${plan.name}" نهائيًا؟${warning}`, { danger: true, confirmLabel: 'امسح' });
+    const ok = await confirm(`مسح خطة "${plan.name}" نهائيًا؟`, { danger: true, confirmLabel: 'امسح' });
     if (!ok) return;
     setBusyId(plan.id);
     const { data, error } = await supabase.from('ai_plans').delete().eq('id', plan.id).select('id');
@@ -100,7 +99,7 @@ export default function AiPlans() {
   if (missing) {
     return (
       <div>
-        <PageHeader eyebrow="المساعد الذكي" title="خطط بو" />
+        {!embedded && <PageHeader eyebrow="المساعد الذكي" title="خطط بو" />}
         <div className="card p-6 max-w-xl">
           <p className="font-messiri font-bold mb-1">جداول الخطط لسه ماتعملتش</p>
           <p className="text-sm text-muted">
@@ -114,15 +113,19 @@ export default function AiPlans() {
 
   return (
     <div>
-      <PageHeader
-        eyebrow="المساعد الذكي"
-        title="خطط بو"
-        action={!dialog && <button type="button" onClick={() => setDialog({})} className="btn-primary">+ خطة جديدة</button>}
-      />
+      {embedded ? (
+        !dialog && <div className="flex justify-end mb-4"><button type="button" onClick={() => setDialog({})} className="btn-primary">+ خطة جديدة</button></div>
+      ) : (
+        <PageHeader
+          eyebrow="المساعد الذكي"
+          title="خطط بو"
+          action={!dialog && <button type="button" onClick={() => setDialog({})} className="btn-primary">+ خطة جديدة</button>}
+        />
+      )}
 
       <p className="text-sm text-muted mb-5 max-w-2xl">
         الطالب بيشترك في خطة (رسايل أكتر في اليوم، وممكن موديل أقوى) وأنت بتفعّل اشتراكه من{' '}
-        <Link to="/ai-subscriptions" className="text-accent-dark font-semibold hover:underline">صفحة الاشتراكات</Link> بعد ما يدفع.
+        <Link to="/ai?tab=subscriptions" className="text-accent-dark font-semibold hover:underline">صفحة الاشتراكات</Link> بعد ما يدفع.
         اللي بتغيّره هنا بيوصل التطبيق من غير تحديث.
       </p>
 
@@ -134,6 +137,7 @@ export default function AiPlans() {
         <ul className="space-y-3">
           {plans.map((plan, i) => {
             const subs = subscribers[plan.id] || 0;
+            const total = totals[plan.id] || 0;
             return (
               <li key={plan.id} className={`card p-4 ${plan.is_active ? '' : 'opacity-75'}`}>
                 <div className="flex items-start justify-between gap-3 flex-wrap">
@@ -150,7 +154,7 @@ export default function AiPlans() {
                 <dl className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-2 mt-3 text-sm">
                   <div><dt className="text-[11px] text-muted font-semibold">الحد اليومي</dt><dd>{plan.daily_limit} رسالة</dd></div>
                   <div><dt className="text-[11px] text-muted font-semibold">المدة</dt><dd>{plan.duration_days ? `${plan.duration_days} يوم` : 'بدون مدة'}</dd></div>
-                  <div><dt className="text-[11px] text-muted font-semibold">مشتركين فعّالين</dt><dd>{subs}</dd></div>
+                  <div><dt className="text-[11px] text-muted font-semibold">مشتركين فعّالين</dt><dd>{subs}{total > subs ? <span className="text-muted text-xs"> (من {total} اشتراك في السجل)</span> : null}</dd></div>
                   <div className="min-w-0">
                     <dt className="text-[11px] text-muted font-semibold">الموديلات</dt>
                     <dd className="truncate font-mono text-xs pt-0.5" dir="ltr" title={(plan.models || []).join(', ')}>
@@ -166,7 +170,11 @@ export default function AiPlans() {
                   </button>
                   <button type="button" disabled={busyId === plan.id || i === 0} onClick={() => move(i, -1)} aria-label={`قدّم ${plan.name}`} className="btn-ghost !px-3 !py-1.5 text-xs">↑</button>
                   <button type="button" disabled={busyId === plan.id || i === plans.length - 1} onClick={() => move(i, 1)} aria-label={`أخّر ${plan.name}`} className="btn-ghost !px-3 !py-1.5 text-xs">↓</button>
-                  <button type="button" disabled={busyId === plan.id} onClick={() => remove(plan)} className="text-xs text-coral-dark font-semibold hover:underline mr-auto">مسح</button>
+                  {canDeletePlan(total) ? (
+                    <button type="button" disabled={busyId === plan.id} onClick={() => remove(plan)} className="text-xs text-coral-dark font-semibold hover:underline mr-auto">مسح</button>
+                  ) : (
+                    <span className="text-[11px] text-muted mr-auto">عليها {total} اشتراك في السجل (حتى الملغي)، فتتخفي بس مش بتتمسح</span>
+                  )}
                 </div>
               </li>
             );

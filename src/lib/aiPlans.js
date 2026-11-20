@@ -78,9 +78,22 @@ export function validatePlanForm(form, { primaryModel = '' } = {}) {
   };
 }
 
+/** عدد الصفوف لكل خطة: { [plan_id]: n } */
+export function countByPlan(rows) {
+  const counts = {};
+  for (const r of rows || []) counts[r.plan_id] = (counts[r.plan_id] || 0) + 1;
+  return counts;
+}
+
+/**
+ * الخطة تتمسح بس لو مفيش ولا اشتراك عليها في أي حالة. الإلغاء مبيفكّش الربط:
+ * الاشتراك الملغي والمنتهي بيفضلوا في السجل المالي وبيشاوروا على الخطة، فالسيرفر بيرفض مسحها.
+ */
+export const canDeletePlan = (totalSubscriptions) => !totalSubscriptions;
+
 /** رسالة مفهومة لخطأ مسح الخطة (السيرفر بيرفض لو عليها اشتراكات) */
 export function planDeleteMessage(error) {
-  if (error?.code === '23503') return 'الخطة دي عليها اشتراكات، فمينفعش تتمسح. اخفِها بدل ما تمسحها (المشتركين فيها مش هيتأثروا).';
+  if (error?.code === '23503') return 'الخطة دي عليها اشتراكات (حتى الملغية والمنتهية بتفضل في السجل)، فمينفعش تتمسح. اخفِها بدل ما تمسحها (المشتركين فيها مش هيتأثروا).';
   return null;
 }
 

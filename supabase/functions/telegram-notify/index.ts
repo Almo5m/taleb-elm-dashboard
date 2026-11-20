@@ -11,30 +11,18 @@
 //   supabase secrets set TELEGRAM_BOT_TOKEN=...
 //   supabase secrets set TELEGRAM_CHAT_ID=...
 //   supabase secrets set WEBHOOK_SECRET=... (نفس القيمة المكتوبة في الـ SQL)
+//   supabase secrets set DASHBOARD_URL=https://<رابط لوحة التحكم على Vercel>  (اختياري: لإضافة زرار "فتح في اللوحة" في رسائل المنتدى)
+
+import {
+  escapeHtml, formatForumReply, formatForumThread, type ForumContext, type WebhookPayload,
+} from './format.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-webhook-secret',
 };
 
-interface WebhookPayload {
-  table: string;
-  event: 'INSERT' | 'UPDATE' | 'DELETE';
-  record: Record<string, unknown>;
-}
-
-// Telegram HTML parse mode بيرفض الرسالة كلها لو فيها < أو > أو & غير متعامل
-// معاها صح — أي قيمة جاية من الداتابيز (اسم طالب، عنوان موضوع...) لازم
-// تتعامل معاها كنص خام، مش HTML، عشان محتوى المستخدم مايكسرش شكل الرسالة
-function escapeHtml(value: unknown): string {
-  if (value === null || value === undefined) return '—';
-  return String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-}
-
-function formatMessage({ table, event, record }: WebhookPayload): string {
+function formatMessage({ table, event, record }: WebhookPayload, ctx: ForumContext, dashboardUrl: string | undefined): string {
   const actionAr = { INSERT: 'إضافة', UPDATE: 'تعديل', DELETE: 'حذف' }[event] ?? event;
   const e = escapeHtml;
 
@@ -43,10 +31,10 @@ function formatMessage({ table, event, record }: WebhookPayload): string {
       return `👤 <b>طالب جديد سجّل</b>\n\n<b>الاسم:</b> ${e(record.name)}\n<b>الإيميل:</b> ${e(record.email)}`;
 
     case 'forum_threads':
-      return `💬 <b>موضوع جديد في المنتدى</b>\n\n<b>العنوان:</b> ${e(record.title)}`;
+      return formatForumThread(record, ctx, dashboardUrl);
 
     case 'forum_replies':
-      return `↩️ <b>رد جديد في المنتدى</b>\n\nعلى موضوع: <code>${e(record.thread_id)}</code>`;
+      return formatForumReply(record, ctx, dashboardUrl);
 
     case 'forum_reports':
       return `🚩 <b>بلاغ جديد في المنتدى</b>\n\n<b>الحالة:</b> ${e(record.status)}\n<b>السبب:</b> ${e(record.reason)}`;
@@ -71,6 +59,40 @@ function formatMessage({ table, event, record }: WebhookPayload): string {
   }
 }
 
+// بيانات المنتدى الناقصة في الـ webhook: عنوان السؤال وصاحبه (للرد) ودور كاتب الرد/السؤال.
+// best-effort بمفتاح service role: لو أي جلب فشل الرسالة بتتبعت بالمتاح بدل ما تقع.
+async function loadForumContext(payload: WebhookPayload): Promise<ForumContext> {
+  const url = Deno.env.get('SUPABASE_URL');
+  const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (!url || !key) return {};
+  if (payload.table !== 'forum_replies' && payload.table !== 'forum_threads') return {};
+
+  const get = async (path: string): Promise<Record<string, unknown> | null> => {
+    try {
+      const res = await fetch(`${url}/rest/v1/${path}`, { headers: { apikey: key, Authorization: `Bearer ${key}` } });
+      if (!res.ok) return null;
+      const rows = await res.json();
+      return Array.isArray(rows) && rows.length ? rows[0] : null;
+    } catch (err) {
+      console.log('forum context fetch failed:', err);
+      return null;
+    }
+  };
+  // الـ id بيتحط في الرابط، فبنقبل شكل UUID/رقم بس
+  const safe = (v: unknown) => (typeof v === 'string' || typeof v === 'number') && /^[A-Za-z0-9-]{1,64}$/.test(String(v)) ? String(v) : null;
+
+  const ctx: ForumContext = {};
+  const authorId = safe(payload.record.author_id);
+  const threadId = payload.table === 'forum_replies' ? safe(payload.record.thread_id) : null;
+  const [thread, author] = await Promise.all([
+    threadId ? get(`forum_threads?id=eq.${threadId}&select=id,title,author_name`) : Promise.resolve(null),
+    authorId ? get(`profiles?id=eq.${authorId}&select=role`) : Promise.resolve(null),
+  ]);
+  if (thread) ctx.thread = thread as ForumContext['thread'];
+  if (author && typeof author.role === 'string') ctx.authorRole = author.role;
+  return ctx;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -86,7 +108,8 @@ Deno.serve(async (req) => {
 
   try {
     const payload: WebhookPayload = await req.json();
-    const text = formatMessage(payload);
+    const ctx = await loadForumContext(payload);
+    const text = formatMessage(payload, ctx, Deno.env.get('DASHBOARD_URL'));
 
     const botToken = Deno.env.get('TELEGRAM_BOT_TOKEN');
     const chatId = Deno.env.get('TELEGRAM_CHAT_ID');

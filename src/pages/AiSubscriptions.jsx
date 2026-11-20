@@ -20,7 +20,7 @@ const STATUS_STAMP = {
 };
 
 // اشتراكات بو: الأدمن بيفعّل الاشتراك يدويًا بعد ما الطالب يدفع. مفيش مسح، الإلغاء بس.
-export default function AiSubscriptions() {
+export default function AiSubscriptions({ embedded = false }) {
   const toast = useToast();
   const confirm = useConfirm();
   const me = useAppUser();
@@ -72,9 +72,11 @@ export default function AiSubscriptions() {
       const { data, error } = await supabase.from('profiles').select('id, name, email').eq('id', studentParam).maybeSingle();
       if (error) { toast('تعذّر تحميل بيانات الطالب', 'error', error); return; }
       if (data) setDialog({ initial: { student: data } });
-      setParams({}, { replace: true });
+      const next = new URLSearchParams(params);
+      next.delete('student'); // بنشيل الطالب بس ونسيب التبويب
+      setParams(next, { replace: true });
     })();
-  }, [studentParam, setParams, toast]);
+  }, [studentParam]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const counts = useMemo(() => tabCounts(rows), [rows]);
   const visible = useMemo(() => filterSubscriptions(rows, tab, query), [rows, tab, query]);
@@ -107,7 +109,7 @@ export default function AiSubscriptions() {
   if (missing) {
     return (
       <div>
-        <PageHeader eyebrow="المساعد الذكي" title="اشتراكات بو" />
+        {!embedded && <PageHeader eyebrow="المساعد الذكي" title="اشتراكات بو" />}
         <div className="card p-6 max-w-xl">
           <p className="font-messiri font-bold mb-1">جداول الاشتراكات لسه ماتعملتش</p>
           <p className="text-sm text-muted">
@@ -120,17 +122,25 @@ export default function AiSubscriptions() {
 
   return (
     <div>
-      <PageHeader
-        eyebrow="المساعد الذكي"
-        title="اشتراكات بو"
-        action={!dialog && (
-          <button type="button" onClick={() => setDialog({})} disabled={plans.length === 0} className="btn-primary">+ تفعيل اشتراك</button>
-        )}
-      />
+      {embedded ? (
+        !dialog && (
+          <div className="flex justify-end mb-4">
+            <button type="button" onClick={() => setDialog({})} disabled={plans.length === 0} className="btn-primary">+ تفعيل اشتراك</button>
+          </div>
+        )
+      ) : (
+        <PageHeader
+          eyebrow="المساعد الذكي"
+          title="اشتراكات بو"
+          action={!dialog && (
+            <button type="button" onClick={() => setDialog({})} disabled={plans.length === 0} className="btn-primary">+ تفعيل اشتراك</button>
+          )}
+        />
+      )}
 
       {plans.length === 0 && (
         <div className="bg-amber/10 border border-amber/40 rounded-xl p-3 mb-5 text-sm max-w-2xl">
-          مفيش خطط لسه. <Link to="/ai-plans" className="text-accent-dark font-semibold hover:underline">أضف خطة</Link> الأول عشان تقدر تفعّل اشتراك.
+          مفيش خطط لسه. <Link to="/ai?tab=plans" className="text-accent-dark font-semibold hover:underline">أضف خطة</Link> الأول عشان تقدر تفعّل اشتراك.
         </div>
       )}
 

@@ -104,8 +104,8 @@ export default function AiSubscriptionsCard() {
       <div className="flex items-center justify-between gap-3 mb-1 flex-wrap">
         <p className="font-messiri font-bold">اشتراكات بو</p>
         <div className="flex items-center gap-3 text-xs font-semibold">
-          <Link to="/ai-subscriptions" className="text-muted hover:text-inktext">الاشتراكات ←</Link>
-          <Link to="/ai-plans" className="text-muted hover:text-inktext">الخطط ←</Link>
+          <Link to="/ai?tab=subscriptions" className="text-muted hover:text-inktext">الاشتراكات ←</Link>
+          <Link to="/ai?tab=plans" className="text-muted hover:text-inktext">الخطط ←</Link>
         </div>
       </div>
       <p className="text-xs text-muted mb-5">الدخل والتكلفة التقديرية لاستهلاك الموديلات</p>
@@ -142,7 +142,7 @@ export default function AiSubscriptionsCard() {
                 : !data.cost.hasRate
                   ? 'حدّد سعر الدولار بالجنيه من الإعدادات عشان التكلفة تتحسب.'
                   : <>موديلات غير مسعّرة: <span className="font-mono" dir="ltr">{data.cost.unpriced.join(', ')}</span>. التكلفة ناقصة لحد ما تضيف سعرها.</>}{' '}
-              <Link to="/settings" className="font-semibold underline">الإعدادات</Link>
+              <Link to="/ai?tab=settings" className="font-semibold underline">الإعدادات</Link>
             </p>
           )}
 

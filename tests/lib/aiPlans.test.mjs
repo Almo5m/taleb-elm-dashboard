@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  activeSubscriptionOf, cairoDayStartIso, estimateCost, formatCairoDate, planChanges, filterSubscriptions, isExpiringSoon, lastMonths, monthlySeries, planDeleteMessage,
+  activeSubscriptionOf, cairoDayStartIso, canDeletePlan, countByPlan, estimateCost, formatCairoDate, planChanges, filterSubscriptions, isExpiringSoon, lastMonths, monthlySeries, planDeleteMessage,
   pricingToRows, renewalStart, reorderedPlans, tabCounts, validatePlanForm, validatePricing, validateSubscriptionForm, daysLeft,
 } from '../../src/lib/aiPlans.js';
 
@@ -217,4 +217,14 @@ test('بداية يوم القاهرة', () => {
   assert.equal(cairoDayStartIso(Date.parse('2026-11-18T22:30:00Z')), '2026-11-18T22:00:00.000Z');
   // صيف (+٣)
   assert.equal(cairoDayStartIso(Date.parse('2026-07-10T12:00:00.500Z')), '2026-07-09T21:00:00.000Z');
+});
+
+test('مسح الخطة: أي اشتراك في أي حالة بيمنع', () => {
+  const all = [{ plan_id: 1, status: 'cancelled' }, { plan_id: 1, status: 'active' }, { plan_id: 2, status: 'cancelled' }];
+  const counts = countByPlan(all);
+  assert.deepEqual(counts, { 1: 2, 2: 1 });
+  assert.equal(canDeletePlan(counts[1]), false);
+  assert.equal(canDeletePlan(counts[2]), false); // ملغي بس، ولسه بيمنع
+  assert.equal(canDeletePlan(counts[3]), true);
+  assert.deepEqual(countByPlan(null), {});
 });

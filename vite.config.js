@@ -11,7 +11,7 @@ export default defineConfig({
       includeAssets: ['favicon.ico', 'favicon-16.png', 'favicon-32.png', 'apple-touch-icon.png', 'logo.png'],
       manifest: {
         name: 'لوحة تحكم طالب علم',
-        short_name: 'طالب علم',
+        short_name: 'لوحة تحكم طالب علم',
         description: 'لوحة تحكم إدارة تطبيق طالب علم',
         lang: 'ar',
         dir: 'rtl',

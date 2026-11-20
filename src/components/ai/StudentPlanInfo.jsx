@@ -43,7 +43,7 @@ export default function StudentPlanInfo({ userId }) {
         )}
         {current && <p className="text-[11px] text-muted mt-0.5">الاشتراك الفعّال بيكسب على تفعيل بو اليدوي من الأعلى.</p>}
       </div>
-      <Link to={`/ai-subscriptions?student=${userId}`} className="btn-ghost !px-3 !py-1.5 text-xs shrink-0">
+      <Link to={`/ai?tab=subscriptions&student=${userId}`} className="btn-ghost !px-3 !py-1.5 text-xs shrink-0">
         {current ? 'تجديد / تغيير' : 'تفعيل اشتراك'}
       </Link>
     </div>
