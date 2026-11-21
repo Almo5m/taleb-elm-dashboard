@@ -27,6 +27,13 @@ const ACTION_TONE = {
   catalog_subject_add: 'forest',
   catalog_subject_edit: 'amber',
   catalog_subject_delete: 'coral',
+  catalog_unit_add: 'forest',
+  catalog_unit_edit: 'amber',
+  catalog_unit_delete: 'coral',
+  catalog_unit_reorder: 'amber',
+  catalog_lessons_move: 'amber',
+  catalog_curriculum_copy: 'forest',
+  catalog_term_update: 'amber',
   client_error_delete: 'coral',
   bulk_ai_enable: 'forest',
   bulk_ai_disable: 'coral',
@@ -46,6 +53,7 @@ const ACTION_TONE = {
   ai_sub_cancel: 'coral',
   ai_pricing_update: 'amber',
   ai_models_update: 'amber',
+  ai_persona_update: 'amber',
 };
 
 const ACTION_LABEL = {
@@ -72,6 +80,13 @@ const ACTION_LABEL = {
   catalog_subject_add: 'إضافة مادة منهج',
   catalog_subject_edit: 'تعديل مادة منهج',
   catalog_subject_delete: 'مسح مادة منهج',
+  catalog_unit_add: 'إضافة وحدة منهج',
+  catalog_unit_edit: 'تعديل وحدة منهج',
+  catalog_unit_delete: 'مسح وحدة منهج',
+  catalog_unit_reorder: 'ترتيب وحدات منهج',
+  catalog_lessons_move: 'نقل دروس بين الوحدات',
+  catalog_curriculum_copy: 'نسخ منهج مادة',
+  catalog_term_update: 'تغيير الترم الحالي',
   client_error_delete: 'حذف تقارير عطل',
   bulk_ai_enable: 'تفعيل جماعي للمساعد الذكي',
   bulk_ai_disable: 'إيقاف جماعي للمساعد الذكي',
@@ -91,6 +106,7 @@ const ACTION_LABEL = {
   ai_sub_cancel: 'إلغاء اشتراك بو',
   ai_pricing_update: 'تعديل أسعار الموديلات',
   ai_models_update: 'تعديل موديلات بو',
+  ai_persona_update: 'تعديل شخصية بو',
 };
 
 export default function AuditLog() {

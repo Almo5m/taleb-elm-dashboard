@@ -3,6 +3,7 @@ import { PageHeader } from '../components/UI';
 import AiOverviewTab from '../components/ai/AiOverviewTab';
 import AiSettingsPanel from '../components/ai/AiSettingsPanel';
 import AiQuestionsTab from '../components/ai/AiQuestionsTab';
+import AiPersonaTab from '../components/ai/AiPersonaTab';
 import AiPlans from './AiPlans';
 import AiSubscriptions from './AiSubscriptions';
 
@@ -12,6 +13,7 @@ export const AI_TABS = [
   { key: 'questions', label: 'الأسئلة' },
   { key: 'subscriptions', label: 'الاشتراكات' },
   { key: 'plans', label: 'الخطط' },
+  { key: 'persona', label: 'الشخصية' },
   { key: 'settings', label: 'الإعدادات' },
 ];
 
@@ -55,6 +57,7 @@ export default function AiHub() {
         {tab === 'questions' && <AiQuestionsTab />}
         {tab === 'subscriptions' && <AiSubscriptions embedded />}
         {tab === 'plans' && <AiPlans embedded />}
+        {tab === 'persona' && <AiPersonaTab />}
         {tab === 'settings' && <AiSettingsPanel />}
       </div>
     </div>

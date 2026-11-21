@@ -30,6 +30,8 @@ class Query {
   private payload: Row | null = null;
   private opts: Row = {};
   private returnRows = false;
+  private orderBy: { col: string; asc: boolean } | null = null;
+  private max: number | null = null;
 
   constructor(private name: string) {}
 
@@ -37,6 +39,8 @@ class Query {
     if (this.action !== 'select') this.returnRows = true;
     return this;
   }
+  order(col: string, opts: { ascending?: boolean } = {}) { this.orderBy = { col, asc: opts.ascending !== false }; return this; }
+  limit(n: number) { this.max = n; return this; }
   eq(col: string, val: unknown) { this.filters.push((r) => r[col] === val); return this; }
   in(col: string, vals: unknown[]) { this.filters.push((r) => vals.includes(r[col])); return this; }
   gt(col: string, val: string) { this.filters.push((r) => r[col] != null && String(r[col]) > val); return this; }
@@ -47,7 +51,15 @@ class Query {
   private run(): { data: any; error: { message: string } | null } {
     if (failTables.has(this.name)) return { data: null, error: { message: `relation "${this.name}" does not exist` } };
     const rows = table(this.name);
-    if (this.action === 'select') return { data: rows.filter((r) => this.filters.every((f) => f(r))).map((r) => ({ ...r })), error: null };
+    if (this.action === 'select') {
+      let out = rows.filter((r) => this.filters.every((f) => f(r))).map((r) => ({ ...r }));
+      if (this.orderBy) {
+        const { col, asc } = this.orderBy;
+        out = out.sort((a, b) => (a[col] > b[col] ? 1 : a[col] < b[col] ? -1 : 0) * (asc ? 1 : -1));
+      }
+      if (this.max !== null) out = out.slice(0, this.max);
+      return { data: out, error: null };
+    }
     if (this.action === 'insert') { rows.push({ ...this.payload! }); return { data: null, error: null }; }
     if (this.action === 'update') {
       for (const r of rows.filter((r) => this.filters.every((f) => f(r)))) Object.assign(r, this.payload);

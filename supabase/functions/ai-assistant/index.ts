@@ -30,6 +30,7 @@ import {
   blockedBody,
   buildContents,
   buildModelChain,
+  buildSystemPrompt,
   CAIRO_TZ,
   cairoDayKey,
   cairoMonthKey,
@@ -39,12 +40,17 @@ import {
   effectiveDailyLimit,
   extractUsage,
   isQuotaKind,
+  KNOWLEDGE_MAX,
   mergeModelChains,
   pickActivePlan,
+  pickPromptText,
+  PERSONA_MAX,
+  PREVIEW_MESSAGE_MAX,
   sanitizeHistory,
   type ActivePlan,
   type GeminiFailure,
 } from './ai-core.ts';
+import { DEFAULT_KNOWLEDGE, DEFAULT_PERSONA } from './persona-defaults.ts';
 
 const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY')!;
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
@@ -56,44 +62,37 @@ type Admin = ReturnType<typeof createClient>;
 const ATTEMPT_TIMEOUT_MS = Number(Deno.env.get('AI_ATTEMPT_TIMEOUT_MS')) || 22_000; // المتغير للاختبارات بس
 const TOTAL_BUDGET_MS = 60_000;
 
-// معلومات عامة عن التطبيق + دور "بو" كمساعد دراسي شامل — مش محتاج RAG أو
-// بحث، نص ثابت كفاية
-const SYSTEM_PROMPT = `
-انت اسمك "بو"، المساعد الذكي داخل تطبيق "طالب علم" — تطبيق مجاني لطلاب
-الثانوية المصرية لتنظيم المذاكرة. عرّف نفسك بالاسم ده لو حد سألك مين انت.
+// شخصية بو ومعرفته بالتطبيق: بتتجاب من جدول ai_persona_versions (بتتعدّل من اللوحة)، ومخزّنة في الذاكرة
+// دقيقة عشان مانزودش استعلام على كل رسالة. المتغير للاختبارات بس.
+const PERSONA_CACHE_MS = Number(Deno.env.get('AI_PERSONA_CACHE_MS') ?? '60000');
+let personaCache: { at: number; prompt: string } | null = null;
 
-دورك مكوّن من 3 حاجات:
-
-1) أسئلة عن التطبيق نفسه (إزاي يستخدم ميزة معينة، فين يلاقي حاجة، إيه وظيفة
-   كل تاب). ميزات التطبيق:
-   - تاب "اليوم": مهام اليوم، وقت المذاكرة، محاضراتك الجاية، عداد الستريك
-   - تاب "المواد": كل مادة فيها دروس، ملخصات، ملفات، مواعيد محاضرات
-   - تاب "الجدول": تقويم بمواعيد الجلسات والامتحانات والمحاضرات
-   - مؤقت بومودورو للمذاكرة المركّزة
-   - منتدى طلابي مقسّم حسب الصف والنظام الدراسي (بحث، أسئلة، ردود، صور)
-   - ركن ديني (أذكار، أدعية، تسبيح، صدقة جارية)
-   - إنجازات ولوحة متصدرين
-   - نسخ احتياطي واستيراد للبيانات من شاشة الإعدادات
-
-2) دعم في الحياة الدراسية عمومًا: تنظيم وقت المذاكرة، التعامل مع قلق
-   الامتحانات، التحفيز والتغلب على التسويف، إزاي يقسّم مذاكرته على أيام
-   الأسبوع، نصايح عامة عن أساليب المذاكرة الفعالة.
-
-3) مساعدة دراسية حقيقية في المواد: تقدر تشرح مفهوم، تحل مسألة، أو توضّح
-   خطوات حل تمرين في أي مادة ثانوية (رياضيات، فيزياء، كيمياء، أحياء، لغات،
-   إلخ). لو مش متأكد 100% من إجابة دقيقة (خصوصًا أرقام أو تفاصيل منهج
-   محددة)، قول كده بصراحة وانصح الطالب يتأكد من المدرس أو الكتاب المدرسي —
-   ماتختلقش معلومة إنت مش متأكد منها.
-
-لو السؤال مش عن التطبيق ولا عن المذاكرة/الدراسة خالص (مواضيع شخصية بعيدة،
-محتوى مش مناسب لسنه، إلخ)، اعتذر بلطف ووضّح إن ده مش من اختصاصك. ردودك قصيرة
-ومباشرة (2-5 جمل حسب تعقيد السؤال)، بالعامية المصرية، ودودة زي صاحب بيشرحله.
-
-مهم جدًا لتنسيق الرد: اكتب بـ Markdown نضيف وبسيط — **نص عريض** للتأكيد،
-قوائم نقطية (-) أو مرقّمة (1. 2. 3.) لو محتاج خطوات، من غير أي رموز أو
-علامات غريبة مالهاش لازمة. متسيبش نص متقطّع أو جملة ناقصة — لو الموضوع كبير،
-اختصره بدل ما تبدأ فيه وتوقف في النص.
-`.trim();
+async function loadSystemPrompt(admin: Admin): Promise<string> {
+  const nowMs = Date.now();
+  if (personaCache && nowMs - personaCache.at < PERSONA_CACHE_MS) return personaCache.prompt;
+  let persona = DEFAULT_PERSONA;
+  let knowledge = DEFAULT_KNOWLEDGE;
+  try {
+    const { data, error } = await admin
+      .from('ai_persona_versions')
+      .select('persona, knowledge')
+      .order('id', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) {
+      // الجدول لسه ماتعملش أو الاستعلام فشل: بو يكمّل بالنص الافتراضي بدل ما يقع
+      console.error('ai_persona_versions read failed:', error.message);
+    } else if (data) {
+      persona = pickPromptText(data.persona, PERSONA_MAX, DEFAULT_PERSONA);
+      knowledge = pickPromptText(data.knowledge, KNOWLEDGE_MAX, DEFAULT_KNOWLEDGE);
+    }
+  } catch (e) {
+    console.error('loadSystemPrompt error:', e);
+  }
+  const prompt = buildSystemPrompt(persona, knowledge);
+  personaCache = { at: nowMs, prompt };
+  return prompt;
+}
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -213,7 +212,7 @@ type GeminiResult =
   | { ok: true; text: string; finishReason?: string; usage: { input: number; output: number } }
   | { ok: false; failure: GeminiFailure };
 
-async function callGemini(model: string, contents: unknown, timeoutMs: number): Promise<GeminiResult> {
+async function callGemini(model: string, contents: unknown, timeoutMs: number, systemPrompt: string): Promise<GeminiResult> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
@@ -222,7 +221,7 @@ async function callGemini(model: string, contents: unknown, timeoutMs: number): 
       // المفتاح في الهيدر مش في الرابط (الروابط بتتسجّل أحيانًا)
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': GEMINI_API_KEY },
       body: JSON.stringify({
-        system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
+        system_instruction: { parts: [{ text: systemPrompt }] },
         contents,
         generationConfig: { maxOutputTokens: 4096, temperature: 0.6 },
       }),
@@ -430,7 +429,7 @@ Deno.serve(async (req) => {
   }
   const userId = userData.user.id;
 
-  let body: { message?: string; history?: unknown; action?: string };
+  let body: { message?: string; history?: unknown; action?: string; persona?: unknown; knowledge?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -441,6 +440,41 @@ Deno.serve(async (req) => {
   if (body.action === 'status') {
     const s = await loadState(admin, userId, new Date());
     return jsonResponse({ ok: true, status: s.status });
+  }
+
+  // تجربة الشخصية من اللوحة قبل الحفظ (أدمن بس): بتستخدم النص المبعوت من غير ما تلمس حدود الطلاب ولا
+  // سجل الأسئلة. بتتحسب في سجل الاستهلاك عشان التكلفة تفضل دقيقة.
+  if (body.action === 'preview') {
+    const { data: me } = await admin.from('profiles').select('role').eq('id', userId).maybeSingle();
+    if (me?.role !== 'admin') return jsonResponse({ error: 'forbidden' }, 403);
+
+    const message = typeof body.message === 'string' ? body.message.trim() : '';
+    if (!message) return jsonResponse({ error: 'رسالة فاضية' }, 400);
+    if (message.length > PREVIEW_MESSAGE_MAX) return jsonResponse({ error: 'الرسالة طويلة' }, 400);
+    const persona = typeof body.persona === 'string' ? body.persona.trim() : '';
+    const knowledge = typeof body.knowledge === 'string' ? body.knowledge.trim() : '';
+    if (!persona || persona.length > PERSONA_MAX) return jsonResponse({ error: 'نص الشخصية فاضي أو أطول من الحد' }, 400);
+    if (!knowledge || knowledge.length > KNOWLEDGE_MAX) return jsonResponse({ error: 'نص معرفة التطبيق فاضي أو أطول من الحد' }, 400);
+
+    const s = await loadState(admin, userId, new Date());
+    const previewPrompt = buildSystemPrompt(persona, knowledge);
+    const started = Date.now();
+    for (const model of s.available) {
+      const left = TOTAL_BUDGET_MS - (Date.now() - started);
+      if (left < 4_000) break;
+      const r = await callGemini(model, buildContents([], message), Math.min(ATTEMPT_TIMEOUT_MS, left), previewPrompt);
+      if (r.ok) {
+        admin
+          .from('ai_usage_events')
+          .insert({ user_id: userId, plan_id: null, model, input_tokens: r.usage.input, output_tokens: r.usage.output })
+          .then(({ error }: { error: { message: string } | null }) => {
+            if (error) console.error('ai_usage_events insert error:', error.message);
+          });
+        return jsonResponse({ ok: true, reply: r.text, model });
+      }
+      if (r.failure.kind === 'auth') break;
+    }
+    return jsonResponse({ error: 'مفيش موديل رد دلوقتي. جرّب بعد شوية', code: 'busy' }, 502);
   }
 
   // Rate limiting بطبقتين:
@@ -512,6 +546,7 @@ Deno.serve(async (req) => {
 
   // كل الحدود تمام — نكلم Gemini بالترتيب: الأساسي، وبعده البدائل لو فشل أو حصته خلصت
   const contents = buildContents(sanitizeHistory(body.history), message);
+  const systemPrompt = await loadSystemPrompt(admin);
   const started = Date.now();
   const failures: { model: string; failure: GeminiFailure }[] = [];
   let replyText: string | null = null;
@@ -521,7 +556,7 @@ Deno.serve(async (req) => {
   for (const model of s.available) {
     const left = TOTAL_BUDGET_MS - (Date.now() - started);
     if (left < 4_000) break;
-    const r = await callGemini(model, contents, Math.min(ATTEMPT_TIMEOUT_MS, left));
+    const r = await callGemini(model, contents, Math.min(ATTEMPT_TIMEOUT_MS, left), systemPrompt);
     if (r.ok) {
       replyText = r.text;
       usedModel = model;

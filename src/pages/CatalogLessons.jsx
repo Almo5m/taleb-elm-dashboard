@@ -8,6 +8,9 @@ import { GRADES, SYSTEMS, hasTracks } from '../lib/divisions';
 import { isMissingRelation, statsFromLessons, statsMap, subjectsFor, trackChoices, trackLabel } from '../lib/catalog';
 import CoverageCard from '../components/catalog/CoverageCard';
 import LessonsEditor from '../components/catalog/LessonsEditor';
+import CurriculumEditor from '../components/catalog/CurriculumEditor';
+import CurrentTermCard from '../components/catalog/CurrentTermCard';
+import { unitStatsFallback, unitStatsMap } from '../lib/catalogUnits';
 import SubjectDialog from '../components/catalog/SubjectDialog';
 
 // دروس المنهج (للأدمن بس): الأدمن بيكتب دروس كل مادة لكل نظام وصف وشعبة، والطالب بيدوس "ضيف دروس المنهج"
@@ -25,6 +28,7 @@ export default function CatalogLessons() {
 
   const [subjects, setSubjects] = useState([]);
   const [stats, setStats] = useState({});
+  const [unitStats, setUnitStats] = useState(null); // null = جداول الوحدات لسه ماتعملتش
   const [loading, setLoading] = useState(true);
   const [missing, setMissing] = useState(false);
   const [system, setSystem] = useState(SYSTEMS[0]);
@@ -43,6 +47,23 @@ export default function CatalogLessons() {
     setStats(statsFromLessons(lessons.data));
   };
 
+  // إحصائيات الوحدات (وحدات المادة والدروس اللي من غير وحدة). لو الجداول مش موجودة unitStats بتفضل null والمحرر القديم بيشتغل
+  const loadUnitStats = async () => {
+    const view = await fetchAll(() => supabase.from('catalog_subject_unit_stats').select('*').order('subject_id'));
+    if (!view.error) { setUnitStats(unitStatsMap(view.data)); return; }
+    const probe = await fetchAll(() => supabase.from('catalog_units').select('id, subject_id').order('id'));
+    if (probe.error) {
+      if (!isMissingRelation(probe.error)) toast('تعذّر تحميل إحصائيات الوحدات', 'error', probe.error);
+      setUnitStats(null);
+      return;
+    }
+    const noUnit = await fetchAll(() => supabase.from('catalog_lessons').select('id, subject_id, is_active').is('unit_id', null).order('id'));
+    if (noUnit.error) { toast('تعذّر تحميل إحصائيات الوحدات', 'error', noUnit.error); setUnitStats(null); return; }
+    setUnitStats(unitStatsFallback(probe.data, noUnit.data));
+  };
+
+  const loadAllStats = async () => { await loadStats(); await loadUnitStats(); };
+
   const loadSubjects = async () => {
     const { data, error } = await fetchAll(() => supabase.from('catalog_subjects').select('*').order('sort_order').order('id'));
     if (isMissingRelation(error)) { setMissing(true); setLoading(false); return false; }
@@ -54,7 +75,7 @@ export default function CatalogLessons() {
 
   useEffect(() => {
     (async () => {
-      if (await loadSubjects()) await loadStats();
+      if (await loadSubjects()) await loadAllStats();
       setLoading(false);
     })();
   }, []);
@@ -76,7 +97,7 @@ export default function CatalogLessons() {
   const removeSubject = async (s) => {
     const n = (stats[s.id]?.visible || 0) + (stats[s.id]?.hidden || 0);
     const ok = await confirm(
-      `هتمسح المادة "${s.subject_name}" ومعاها ${n} درس نهائيًا. اللي اتنسخ للطلاب خلاص مبيتأثرش. متأكد؟`,
+      `هتمسح المادة "${s.subject_name}" ومعاها ${n} درس${unitStats?.[s.id]?.units ? ` و${unitStats[s.id].units} وحدة` : ''} نهائيًا. اللي اتنسخ للطلاب خلاص مبيتأثرش. متأكد؟`,
       { danger: true, confirmLabel: 'مسح المادة' }
     );
     if (!ok) return;
@@ -89,7 +110,7 @@ export default function CatalogLessons() {
     toast('اتمسحت المادة');
     if (openId === s.id) setOpenId(null);
     await loadSubjects();
-    await loadStats();
+    await loadAllStats();
   };
 
   if (loading) return <Spinner />;
@@ -118,7 +139,15 @@ export default function CatalogLessons() {
         الدروس اللي بتضيفها هنا بتظهر للطلاب كزرار "ضيف دروس المنهج" في مادتهم. اللي اتنسخ لطالب خلاص مبيتأثرش بأي تعديل أو إخفاء أو مسح.
       </p>
 
-      <CoverageCard subjects={subjects} stats={stats} />
+      {unitStats === null && (
+        <p className="text-sm bg-amber/10 border border-amber/40 rounded-xl p-3 mb-5 text-amber-dark">
+          الوحدات والأترام لسه مش متفعّلة. شغّل في Supabase SQL Editor بالترتيب: <span className="font-mono" dir="ltr">supabase_catalog_subjects_link.sql</span> ثم <span className="font-mono" dir="ltr">supabase_catalog_units.sql</span> (وبعدها اختياري <span className="font-mono" dir="ltr">sql/supabase_catalog_units_admin.sql</span>). لحد كده الصفحة بتشتغل بالدروس من غير وحدات.
+        </p>
+      )}
+
+      <CurrentTermCard />
+
+      <CoverageCard subjects={subjects} stats={stats} unitStats={unitStats} />
 
       <div className="card p-4 mb-5 space-y-3">
         <div className="flex flex-wrap gap-2" role="group" aria-label="النظام">
@@ -141,8 +170,9 @@ export default function CatalogLessons() {
           subject={dialog.subject}
           defaults={{ system, grade, track }}
           subjects={subjects}
+          supportsUnits={unitStats !== null}
           onClose={() => setDialog(null)}
-          onSaved={async () => { setDialog(null); await loadSubjects(); await loadStats(); }}
+          onSaved={async () => { setDialog(null); await loadSubjects(); await loadAllStats(); }}
         />
       )}
 
@@ -161,6 +191,7 @@ export default function CatalogLessons() {
               {list.map((s) => {
                 const st = stats[s.id] || { visible: 0, hidden: 0 };
                 const empty = st.visible === 0;
+                const us = unitStats?.[s.id];
                 return (
                   <li key={s.id} className={`py-2.5 flex flex-wrap items-center gap-2 ${openId === s.id ? 'bg-accent/10 -mx-2 px-2 rounded-lg' : ''} ${empty ? 'border-r-4 border-amber pr-2' : ''}`}>
                     <button onClick={() => openEditor(s.id)} className="flex-1 min-w-[10rem] text-right">
@@ -168,6 +199,11 @@ export default function CatalogLessons() {
                       <span className={`block text-xs ${empty ? 'text-amber-dark font-semibold' : 'text-muted'}`}>
                         {empty ? 'مفيش دروس ظاهرة' : `${st.visible} ظاهر`}{st.hidden > 0 ? ` · ${st.hidden} مخفي` : ''}
                       </span>
+                      {us && (
+                        <span className="block text-[11px] text-muted">
+                          {us.units} وحدة{us.noUnitVisible > 0 && <span className="text-amber-dark font-semibold"> · {us.noUnitVisible} درس من غير وحدة</span>}
+                        </span>
+                      )}
                     </button>
                     <span className="flex items-center gap-1 shrink-0">
                       <button onClick={() => setDialog({ mode: 'edit', subject: s })} className="btn-ghost !px-2.5 !py-1 text-xs">تعديل</button>
@@ -182,14 +218,24 @@ export default function CatalogLessons() {
 
         <div ref={editorRef}>
           {openSubject ? (
-            <LessonsEditor
-              key={openSubject.id}
-              subject={openSubject}
-              subjects={subjects}
-              stats={stats}
-              onChanged={loadStats}
-              onClose={() => setOpenId(null)}
-            />
+            unitStats !== null ? (
+              <CurriculumEditor
+                key={openSubject.id}
+                subject={openSubject}
+                subjects={subjects}
+                onChanged={loadAllStats}
+                onClose={() => setOpenId(null)}
+              />
+            ) : (
+              <LessonsEditor
+                key={openSubject.id}
+                subject={openSubject}
+                subjects={subjects}
+                stats={stats}
+                onChanged={loadStats}
+                onClose={() => setOpenId(null)}
+              />
+            )
           ) : (
             <div className="card p-6 text-center text-sm text-muted hidden xl:block">اختار مادة من القايمة عشان تعدّل دروسها.</div>
           )}

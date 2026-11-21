@@ -1,13 +1,15 @@
 import { useMemo, useState } from 'react';
 import { Stamp } from '../UI';
 import { coverage } from '../../lib/catalog';
+import { unitCoverage } from '../../lib/catalogUnits';
 
 // تغطية المنهج: لكل نظام وصف، كام مادة فيها دروس ظاهرة من الإجمالي (نسبة)
-export default function CoverageCard({ subjects, stats }) {
+export default function CoverageCard({ subjects, stats, unitStats = null }) {
   const [open, setOpen] = useState(false);
   const rows = useMemo(() => coverage(subjects, stats), [subjects, stats]);
   const total = rows.reduce((s, r) => s + r.total, 0);
   const covered = rows.reduce((s, r) => s + r.covered, 0);
+  const units = useMemo(() => (unitStats ? unitCoverage(subjects, unitStats) : null), [subjects, unitStats]);
 
   return (
     <div className="card p-4 mb-5">
@@ -18,6 +20,12 @@ export default function CoverageCard({ subjects, stats }) {
           <span>{open ? '▲' : '▼'}</span>
         </span>
       </button>
+      {units && (
+        <p className="text-xs text-muted mt-2">
+          {units.withUnits} من {units.total} مادة فيها وحدات
+          {units.noUnitLessons > 0 && <> · <span className="text-amber-dark font-semibold">{units.noUnitLessons} درس ظاهر لسه من غير وحدة</span></>}
+        </p>
+      )}
       {open && (
         <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
           {[...new Set(rows.map((r) => r.system))].map((system) => (

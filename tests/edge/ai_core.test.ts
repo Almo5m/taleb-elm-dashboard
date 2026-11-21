@@ -2,6 +2,7 @@ import {
   availableModels, blockedBody, buildContents, buildModelChain, cairoDayKey, cairoMonthKey, classifyGeminiFailure,
   computeStatus, cooldownUntil, effectiveDailyLimit, extractUsage, mergeModelChains, nextCairoMidnight, nextPacificMidnight,
   pickActivePlan, sanitizeHistory, sanitizeModelNames,
+  buildSystemPrompt, GUARDRAILS, KNOWLEDGE_MAX, PERSONA_MAX, pickPromptText,
 } from '../../supabase/functions/ai-assistant/ai-core.ts';
 import { eq, ok } from './assert.ts';
 
@@ -145,4 +146,23 @@ Deno.test('الحالة مع خطة: بتفعّل، وبتتخطّى السقف 
   eq([s.state, s.plan?.name, s.plan?.days_left, s.plan?.ends_at], ['ok', 'متفوق', 3, '2026-11-18T12:00:00.000Z'], 'المشترك مبيتأثرش بالسقف الشهري');
   eq(computeStatus({ ...base, plan, usedToday: 30 }).state, 'daily_limit', 'حد الخطة اليومي لسه شغال');
   eq(computeStatus({ ...base, monthlyCount: 0 }).plan, null, 'من غير خطة: plan = null');
+});
+
+Deno.test('برومبت النظام: الشخصية ثم المعرفة ثم القواعد الثابتة في الآخر', () => {
+  const p = buildSystemPrompt('شخصية-س', 'معرفة-ص');
+  ok(p.startsWith('شخصية-س'), 'الشخصية الأول');
+  ok(p.indexOf('معرفة-ص') > p.indexOf('شخصية-س'), 'المعرفة بعدها');
+  ok(p.endsWith(GUARDRAILS), 'القواعد الثابتة في الآخر');
+  ok(p.indexOf(GUARDRAILS) > p.indexOf('معرفة-ص'), 'القواعد بعد المعرفة');
+});
+
+Deno.test('نص الإعدادات: الفاضي والغلط والطويل بيرجع للافتراضي', () => {
+  eq(pickPromptText('  نص  ', 10, 'افتراضي'), 'نص', 'بيتنضّف');
+  eq(pickPromptText('', 10, 'افتراضي'), 'افتراضي', 'فاضي');
+  eq(pickPromptText('   ', 10, 'افتراضي'), 'افتراضي', 'مسافات بس');
+  eq(pickPromptText(null, 10, 'افتراضي'), 'افتراضي', 'null');
+  eq(pickPromptText(42, 10, 'افتراضي'), 'افتراضي', 'مش نص');
+  eq(pickPromptText('x'.repeat(11), 10, 'افتراضي'), 'افتراضي', 'أطول من الحد');
+  eq(pickPromptText('x'.repeat(10), 10, 'افتراضي'), 'x'.repeat(10), 'على الحد بالظبط');
+  ok(PERSONA_MAX === 3000 && KNOWLEDGE_MAX === 4000, 'الحدود');
 });

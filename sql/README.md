@@ -37,6 +37,9 @@
 | `supabase_catalog_admin.sql` | view عدّادات الدروس لكل مادة (لصفحة دروس المنهج) | جاهز، لسه مااتشغّلش (بعد `supabase_catalog_lessons.sql`) |
 | `supabase_ai_model_state.sql` | حالة موديلات بو (أنهي موديل خلصت حصته ولحد إمتى). بتستخدمها دالة `ai-assistant` الجديدة وكارت "حالة موديلات بو" في الإعدادات. شغّلها قبل نشر الدالة | جاهز، لسه مااتشغّلش (**من كلود التطبيق**) |
 | `supabase_ai_plans.sql` | خطط واشتراكات بو + سجل التكلفة (`ai_plans`, `ai_subscriptions`, `ai_usage_events` + views للوحة). شغّلها بعد `supabase_ai_model_state.sql` | جاهز، لسه مااتشغّلش (**من كلود التطبيق**) |
+| `supabase_ai_persona.sql` | نسخ شخصية بو ومعرفته بالتطبيق (`ai_persona_versions`، للأدمن بس، آخر ٥٠ نسخة). تبويب "الشخصية" في اللوحة بيكتب فيه ودالة `ai-assistant` بتقرا منه. من غيره بو بيستخدم النص الافتراضي في الكود | جاهز، لسه مااتشغّلش |
+| `supabase_catalog_subjects_link.sql` ثم `supabase_catalog_units.sql` | وحدات المنهج وأترامه: `catalog_subjects.unit_label` وجدول `catalog_units` وعمود `catalog_lessons.unit_id` ودالة `get_catalog_curriculum`. **من كلود التطبيق** (انسخهم في `sql/` وشغّلهم بالترتيب بعد `supabase_catalog_lessons.sql`) | جاهز، لسه مااتشغّلوش |
+| `supabase_catalog_units_admin.sql` | view `catalog_subject_unit_stats` (عدد الوحدات والدروس اللي من غير وحدة لكل مادة) لقايمة المواد وكارت التغطية. اختياري، اللوحة بتعدّ من الجداول لو مش موجودة | جاهز، شغّله بعد ملف الوحدات |
 | `supabase_emails.sql` | الإيميلات | مؤجل (محتاج دومين خاص) |
 
 ملفات الأصل (`supabase_setup/forum/admin/moderation/features.sql`) في ريبو التطبيق مش هنا.
